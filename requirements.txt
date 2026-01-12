@@ -1,0 +1,26 @@
+# Cloudflare WAF/DDoS Tester Dependencies
+
+# Core HTTP Libraries
+aiohttp>=3.9.0
+httpx[http2]>=0.26.0
+requests>=2.31.0
+
+# Browser Automation
+selenium>=4.16.0
+playwright>=1.40.0
+
+# Browser Impersonation
+curl_cffi>=0.6.0
+
+# CLI and Output
+rich>=13.7.0
+
+# Async Support
+asyncio-throttle>=1.0.2
+
+# Optional: For advanced TLS fingerprinting
+# tls-client>=1.0.0
+
+# Development/Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
