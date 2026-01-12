@@ -247,7 +247,8 @@ def cli_mode(args):
         concurrency=concurrency,
         ddos_waves=waves,
         ddos_wave_delay=args.ddos_wave_delay,
-        ddos_ramp_up=not args.no_ramp_up
+        ddos_ramp_up=not args.no_ramp_up,
+        verbose=args.verbose
     )
     
     test_type = "3"

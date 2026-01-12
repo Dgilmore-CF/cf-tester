@@ -21,6 +21,44 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 
+OWASP_DOCS = {
+    "A01:2021": "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+    "A02:2021": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+    "A03:2021": "https://owasp.org/Top10/A03_2021-Injection/",
+    "A04:2021": "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+    "A05:2021": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+    "A06:2021": "https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/",
+    "A07:2021": "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+    "A08:2021": "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
+    "A09:2021": "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/",
+    "A10:2021": "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/",
+}
+
+CVE_DOCS = {
+    "CVE-2021-44228": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",  # Log4Shell
+    "CVE-2021-45046": "https://nvd.nist.gov/vuln/detail/CVE-2021-45046",  # Log4j
+    "CVE-2017-5638": "https://nvd.nist.gov/vuln/detail/CVE-2017-5638",   # Apache Struts
+    "CVE-2019-11043": "https://nvd.nist.gov/vuln/detail/CVE-2019-11043", # PHP-FPM
+    "CVE-2021-41773": "https://nvd.nist.gov/vuln/detail/CVE-2021-41773", # Apache Path Traversal
+    "CVE-2021-26855": "https://nvd.nist.gov/vuln/detail/CVE-2021-26855", # ProxyLogon
+    "CVE-2021-34473": "https://nvd.nist.gov/vuln/detail/CVE-2021-34473", # ProxyShell
+    "CVE-2022-22965": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965", # Spring4Shell
+}
+
+CWE_DOCS = {
+    "CWE-79": "https://cwe.mitre.org/data/definitions/79.html",    # XSS
+    "CWE-89": "https://cwe.mitre.org/data/definitions/89.html",    # SQL Injection
+    "CWE-78": "https://cwe.mitre.org/data/definitions/78.html",    # OS Command Injection
+    "CWE-22": "https://cwe.mitre.org/data/definitions/22.html",    # Path Traversal
+    "CWE-611": "https://cwe.mitre.org/data/definitions/611.html",  # XXE
+    "CWE-918": "https://cwe.mitre.org/data/definitions/918.html",  # SSRF
+    "CWE-1336": "https://cwe.mitre.org/data/definitions/1336.html", # SSTI
+    "CWE-917": "https://cwe.mitre.org/data/definitions/917.html",  # Expression Language Injection
+    "CWE-94": "https://cwe.mitre.org/data/definitions/94.html",    # Code Injection
+    "CWE-113": "https://cwe.mitre.org/data/definitions/113.html",  # HTTP Header Injection
+}
+
+
 @dataclass
 class WAFTestCase:
     """A WAF test case definition."""
@@ -34,6 +72,26 @@ class WAFTestCase:
     description: str
     cwe_id: Optional[str] = None
     owasp_category: Optional[str] = None
+    cve_id: Optional[str] = None
+    
+    def get_cwe_url(self) -> Optional[str]:
+        """Get the CWE documentation URL."""
+        if self.cwe_id:
+            return CWE_DOCS.get(self.cwe_id, f"https://cwe.mitre.org/data/definitions/{self.cwe_id.split('-')[1]}.html")
+        return None
+    
+    def get_owasp_url(self) -> Optional[str]:
+        """Get the OWASP documentation URL."""
+        if self.owasp_category:
+            key = self.owasp_category.split("-")[0].strip()
+            return OWASP_DOCS.get(key)
+        return None
+    
+    def get_cve_url(self) -> Optional[str]:
+        """Get the CVE documentation URL."""
+        if self.cve_id:
+            return CVE_DOCS.get(self.cve_id, f"https://nvd.nist.gov/vuln/detail/{self.cve_id}")
+        return None
 
 
 @dataclass
@@ -232,6 +290,59 @@ class WAFTester:
         self.passed_count = 0
         self.bypass_count = 0
     
+    def _print_verbose_test_info(self, test_case: WAFTestCase, target: str, url: str, 
+                                   headers: dict, params: dict, data: Optional[str]):
+        """Print verbose information about the test case being executed."""
+        console.print(f"\n[bold white on blue] TEST CASE [/]")
+        console.print(f"[bold cyan]Name:[/] {test_case.name}")
+        console.print(f"[bold cyan]Category:[/] {test_case.category}")
+        console.print(f"[bold cyan]Description:[/] {test_case.description}")
+        
+        if test_case.cwe_id:
+            cwe_url = test_case.get_cwe_url()
+            console.print(f"[bold cyan]CWE:[/] {test_case.cwe_id} - {cwe_url}")
+        
+        if test_case.owasp_category:
+            owasp_url = test_case.get_owasp_url()
+            console.print(f"[bold cyan]OWASP:[/] {test_case.owasp_category}")
+            if owasp_url:
+                console.print(f"[bold cyan]OWASP Doc:[/] {owasp_url}")
+        
+        if test_case.cve_id:
+            cve_url = test_case.get_cve_url()
+            console.print(f"[bold red]CVE:[/] {test_case.cve_id} - {cve_url}")
+        
+        console.print(f"\n[bold yellow]HTTP Request:[/]")
+        console.print(f"  [cyan]Method:[/] {test_case.method.name}")
+        console.print(f"  [cyan]URL:[/] {url}")
+        
+        if params:
+            console.print(f"  [cyan]Query Params:[/] {params}")
+        
+        if headers:
+            console.print(f"  [cyan]Headers:[/]")
+            for k, v in headers.items():
+                display_v = v[:80] + "..." if len(v) > 80 else v
+                console.print(f"    {k}: {display_v}")
+        
+        if data:
+            display_data = data[:200] + "..." if len(data) > 200 else data
+            console.print(f"  [cyan]Body:[/] {display_data}")
+        
+        console.print(f"  [cyan]Payload:[/] [yellow]{test_case.payload[:100]}{'...' if len(test_case.payload) > 100 else ''}[/]")
+        console.print(f"  [cyan]Injection Point:[/] {test_case.injection_point}")
+    
+    def _print_verbose_result(self, result: WAFTestResult):
+        """Print verbose result information."""
+        if result.blocked:
+            console.print(f"[bold green]Result: BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
+        else:
+            console.print(f"[bold red]Result: NOT BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
+        
+        if result.cf_ray:
+            console.print(f"[dim]CF-Ray: {result.cf_ray}[/]")
+        console.print("─" * 60)
+    
     async def run(self) -> List[WAFTestResult]:
         """Run WAF tests based on configuration."""
         test_cases = self._generate_test_cases()
@@ -240,36 +351,17 @@ class WAFTester:
             console.print(f"\n[bold cyan]Target:[/] {target}")
             console.print(f"[bold cyan]Ruleset:[/] {self.config.waf_ruleset.name}")
             console.print(f"[bold cyan]Total Test Cases:[/] {len(test_cases)}")
-            console.print(f"[bold cyan]Bypass Testing:[/] {'Enabled' if self.config.use_bypass_techniques else 'Disabled'}\n")
+            console.print(f"[bold cyan]Bypass Testing:[/] {'Enabled' if self.config.use_bypass_techniques else 'Disabled'}")
+            console.print(f"[bold cyan]Verbose Mode:[/] {'Enabled' if self.config.verbose else 'Disabled'}\n")
             
             self.blocked_count = 0
             self.passed_count = 0
             self.bypass_count = 0
             
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description}"),
-                BarColumn(bar_width=40),
-                TaskProgressColumn(),
-                TextColumn("|"),
-                TextColumn("[green]Blocked:{task.fields[blocked]}"),
-                TextColumn("[yellow]Passed:{task.fields[passed]}"),
-                TextColumn("[red]Bypassed:{task.fields[bypassed]}"),
-                TextColumn("|"),
-                TimeElapsedColumn(),
-                console=console,
-                refresh_per_second=10
-            ) as progress:
-                task = progress.add_task(
-                    "WAF Testing",
-                    total=len(test_cases),
-                    blocked=0,
-                    passed=0,
-                    bypassed=0
-                )
-                
-                for test_case in test_cases:
-                    result = await self._run_test_case(test_case, target)
+            if self.config.verbose:
+                for i, test_case in enumerate(test_cases, 1):
+                    console.print(f"\n[bold white]Test {i}/{len(test_cases)}[/]")
+                    result = await self._run_test_case(test_case, target, verbose=True)
                     self.results.append(result)
                     
                     if result.blocked:
@@ -284,14 +376,54 @@ class WAFTester:
                         for br in bypass_results:
                             if br.bypass_successful:
                                 self.bypass_count += 1
-                    
-                    progress.update(
-                        task,
-                        advance=1,
-                        blocked=self.blocked_count,
-                        passed=self.passed_count,
-                        bypassed=self.bypass_count
+                                console.print(f"[bold red]  ⚠ BYPASS SUCCESSFUL using {br.bypass_technique}![/]")
+            else:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[bold blue]{task.description}"),
+                    BarColumn(bar_width=40),
+                    TaskProgressColumn(),
+                    TextColumn("|"),
+                    TextColumn("[green]Blocked:{task.fields[blocked]}"),
+                    TextColumn("[yellow]Passed:{task.fields[passed]}"),
+                    TextColumn("[red]Bypassed:{task.fields[bypassed]}"),
+                    TextColumn("|"),
+                    TimeElapsedColumn(),
+                    console=console,
+                    refresh_per_second=10
+                ) as progress:
+                    task = progress.add_task(
+                        "WAF Testing",
+                        total=len(test_cases),
+                        blocked=0,
+                        passed=0,
+                        bypassed=0
                     )
+                    
+                    for test_case in test_cases:
+                        result = await self._run_test_case(test_case, target, verbose=False)
+                        self.results.append(result)
+                        
+                        if result.blocked:
+                            self.blocked_count += 1
+                        else:
+                            self.passed_count += 1
+                        
+                        if self.config.use_bypass_techniques and result.blocked:
+                            bypass_results = await self._try_bypass(test_case, target)
+                            self.results.extend(bypass_results)
+                            
+                            for br in bypass_results:
+                                if br.bypass_successful:
+                                    self.bypass_count += 1
+                        
+                        progress.update(
+                            task,
+                            advance=1,
+                            blocked=self.blocked_count,
+                            passed=self.passed_count,
+                            bypassed=self.bypass_count
+                        )
             
             console.print(f"\n[bold]WAF Test Summary for {target}:[/]")
             console.print(f"  [green]Blocked:[/] {self.blocked_count}/{len(test_cases)}")
@@ -425,6 +557,7 @@ class WAFTester:
                 method=HTTPMethod.GET,
                 injection_point="header",
                 expected_block=True,
+                cve_id="CVE-2021-44228",
                 description=desc,
                 cwe_id="CWE-917",
                 owasp_category="A06:2021-Vulnerable Components"
@@ -474,7 +607,7 @@ class WAFTester:
         
         return test_cases
     
-    async def _run_test_case(self, test_case: WAFTestCase, target: str) -> WAFTestResult:
+    async def _run_test_case(self, test_case: WAFTestCase, target: str, verbose: bool = False) -> WAFTestResult:
         """Run a single test case."""
         
         url = target
@@ -495,6 +628,9 @@ class WAFTester:
         elif test_case.injection_point == "user_agent":
             headers["User-Agent"] = test_case.payload
         
+        if verbose:
+            self._print_verbose_test_info(test_case, target, url, headers, params, data)
+        
         response = await self.http_engine.request(
             url,
             test_case.method,
@@ -506,7 +642,7 @@ class WAFTester:
         
         blocked = self._is_blocked(response)
         
-        return WAFTestResult(
+        result = WAFTestResult(
             test_case=test_case,
             target=target,
             response_code=response.status_code,
@@ -517,6 +653,11 @@ class WAFTester:
             bypass_successful=False,
             raw_response=response.body[:500] if response.body else None
         )
+        
+        if verbose:
+            self._print_verbose_result(result)
+        
+        return result
     
     def _is_blocked(self, response: HTTPResponse) -> bool:
         """Determine if a request was blocked by WAF."""

@@ -83,6 +83,27 @@ class DDoSSimulator:
         self.success_count = 0
         self.total_requests_sent = 0
     
+    def _get_attack_description(self, attack_type: DDoSAttackType) -> str:
+        """Get a description of the attack type."""
+        descriptions = {
+            DDoSAttackType.UDP_FLOOD: "Volumetric attack simulating UDP packet flood to overwhelm bandwidth",
+            DDoSAttackType.ICMP_FLOOD: "Volumetric attack simulating ICMP echo request flood (ping flood)",
+            DDoSAttackType.DNS_AMPLIFICATION: "Amplification attack exploiting DNS servers for traffic multiplication",
+            DDoSAttackType.NTP_AMPLIFICATION: "Amplification attack exploiting NTP servers for traffic multiplication",
+            DDoSAttackType.SYN_FLOOD: "Protocol attack flooding target with TCP SYN packets",
+            DDoSAttackType.SYN_ACK_FLOOD: "Protocol attack with TCP SYN-ACK reflection",
+            DDoSAttackType.ACK_FLOOD: "Protocol attack flooding target with TCP ACK packets",
+            DDoSAttackType.RST_FLOOD: "Protocol attack flooding target with TCP RST packets",
+            DDoSAttackType.FRAGMENTATION: "Protocol attack sending fragmented IP packets",
+            DDoSAttackType.HTTP_GET_FLOOD: "Application layer attack flooding HTTP GET requests",
+            DDoSAttackType.HTTP_POST_FLOOD: "Application layer attack flooding HTTP POST requests with data",
+            DDoSAttackType.SLOWLORIS: "Low-and-slow attack holding connections open with partial headers",
+            DDoSAttackType.RUDY: "R-U-Dead-Yet attack sending slow POST data",
+            DDoSAttackType.CACHE_BYPASS: "Application attack with unique requests to bypass CDN cache",
+            DDoSAttackType.MULTI_VECTOR: "Combined attack using multiple vectors simultaneously",
+        }
+        return descriptions.get(attack_type, "Unknown attack type")
+    
     async def run(self) -> List[DDoSTestResult]:
         """Run the configured DDoS tests with wave-based attacks."""
         attack_type = DDoSAttackType(self.config.ddos_attack_type)
@@ -95,12 +116,14 @@ class DDoSSimulator:
             console.print(f"[bold red]{'='*60}[/]")
             console.print(f"\n[bold cyan]Target:[/] {target}")
             console.print(f"[bold cyan]Attack Type:[/] {attack_type.name}")
+            console.print(f"[bold cyan]Description:[/] {self._get_attack_description(attack_type)}")
             console.print(f"[bold cyan]Requests per Wave:[/] {self.config.request_count:,}")
             console.print(f"[bold cyan]Number of Waves:[/] {self.config.ddos_waves}")
             console.print(f"[bold cyan]Total Requests:[/] {total_requests:,}")
             console.print(f"[bold cyan]Concurrency:[/] {self.config.concurrency}")
             console.print(f"[bold cyan]Burst Mode:[/] {'Enabled' if self.config.ddos_burst_mode else 'Disabled'}")
-            console.print(f"[bold cyan]Ramp Up:[/] {'Enabled' if self.config.ddos_ramp_up else 'Disabled'}\n")
+            console.print(f"[bold cyan]Ramp Up:[/] {'Enabled' if self.config.ddos_ramp_up else 'Disabled'}")
+            console.print(f"[bold cyan]Verbose Mode:[/] {'Enabled' if self.config.verbose else 'Disabled'}\n")
             
             all_wave_results = []
             
