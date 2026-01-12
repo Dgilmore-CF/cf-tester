@@ -18,13 +18,18 @@ class Config:
     targets: List[str] = field(default_factory=list)
     http_engine: str = "aiohttp"
     use_bypass_techniques: bool = False
-    request_count: int = 100
-    concurrency: int = 10
+    request_count: int = 5000
+    concurrency: int = 100
     timeout: int = 30
     
     ddos_attack_type: int = 10
     ddos_duration: int = 60
     ddos_rate_limit: Optional[int] = None
+    ddos_waves: int = 3
+    ddos_wave_delay: float = 2.0
+    ddos_burst_mode: bool = True
+    ddos_sustained: bool = False
+    ddos_ramp_up: bool = True
     
     waf_ruleset: WAFRuleset = WAFRuleset.BOTH
     waf_test_all_categories: bool = True

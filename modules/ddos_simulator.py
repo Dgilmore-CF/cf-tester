@@ -81,22 +81,93 @@ class DDoSSimulator:
         self.completed_requests = 0
         self.blocked_count = 0
         self.success_count = 0
+        self.total_requests_sent = 0
     
     async def run(self) -> List[DDoSTestResult]:
-        """Run the configured DDoS tests."""
+        """Run the configured DDoS tests with wave-based attacks."""
         attack_type = DDoSAttackType(self.config.ddos_attack_type)
         
         for target in self.config.get_target_urls():
+            total_requests = self.config.request_count * self.config.ddos_waves
+            
+            console.print(f"\n[bold red]{'='*60}[/]")
+            console.print(f"[bold red]DDoS ATTACK SIMULATION[/]")
+            console.print(f"[bold red]{'='*60}[/]")
             console.print(f"\n[bold cyan]Target:[/] {target}")
             console.print(f"[bold cyan]Attack Type:[/] {attack_type.name}")
-            console.print(f"[bold cyan]Total Requests:[/] {self.config.request_count}")
-            console.print(f"[bold cyan]Concurrency:[/] {self.config.concurrency}\n")
+            console.print(f"[bold cyan]Requests per Wave:[/] {self.config.request_count:,}")
+            console.print(f"[bold cyan]Number of Waves:[/] {self.config.ddos_waves}")
+            console.print(f"[bold cyan]Total Requests:[/] {total_requests:,}")
+            console.print(f"[bold cyan]Concurrency:[/] {self.config.concurrency}")
+            console.print(f"[bold cyan]Burst Mode:[/] {'Enabled' if self.config.ddos_burst_mode else 'Disabled'}")
+            console.print(f"[bold cyan]Ramp Up:[/] {'Enabled' if self.config.ddos_ramp_up else 'Disabled'}\n")
             
-            result = await self._run_attack(attack_type, target)
-            self.results.append(result)
+            all_wave_results = []
+            
+            for wave in range(1, self.config.ddos_waves + 1):
+                console.print(f"[bold yellow]━━━ Wave {wave}/{self.config.ddos_waves} ━━━[/]")
+                
+                if self.config.ddos_ramp_up and wave > 1:
+                    ramp_concurrency = min(
+                        self.config.concurrency * wave,
+                        self.config.concurrency * 2
+                    )
+                    original_concurrency = self.config.concurrency
+                    self.config.concurrency = ramp_concurrency
+                    console.print(f"[dim]Ramping up concurrency to {ramp_concurrency}[/]")
+                
+                result = await self._run_attack(attack_type, target)
+                all_wave_results.append(result)
+                
+                if self.config.ddos_ramp_up and wave > 1:
+                    self.config.concurrency = original_concurrency
+                
+                if wave < self.config.ddos_waves:
+                    console.print(f"[dim]Wave complete. Pausing {self.config.ddos_wave_delay}s before next wave...[/]\n")
+                    await asyncio.sleep(self.config.ddos_wave_delay)
+            
+            combined_result = self._combine_wave_results(attack_type, target, all_wave_results)
+            self.results.append(combined_result)
+            
+            console.print(f"\n[bold green]Attack Complete![/]")
+            console.print(f"[bold]Total Requests Sent:[/] {combined_result.total_requests:,}")
+            console.print(f"[bold]Requests/Second:[/] {combined_result.requests_per_second:.2f}")
+            console.print(f"[bold]Protection Triggered:[/] {'[red]YES[/]' if combined_result.cf_protection_triggered else '[yellow]NO[/]'}")
         
         await self.http_engine.close()
         return self.results
+    
+    def _combine_wave_results(self, attack_type: DDoSAttackType, target: str, results: List[DDoSTestResult]) -> DDoSTestResult:
+        """Combine results from multiple waves into a single result."""
+        total_duration = sum(r.duration for r in results)
+        
+        status_dist: Dict[int, int] = {}
+        for r in results:
+            for code, count in r.status_code_distribution.items():
+                status_dist[code] = status_dist.get(code, 0) + count
+        
+        all_ray_ids = []
+        for r in results:
+            all_ray_ids.extend(r.cf_ray_ids)
+        
+        return DDoSTestResult(
+            attack_type=attack_type,
+            target=target,
+            total_requests=sum(r.total_requests for r in results),
+            successful_requests=sum(r.successful_requests for r in results),
+            blocked_requests=sum(r.blocked_requests for r in results),
+            challenged_requests=sum(r.challenged_requests for r in results),
+            error_requests=sum(r.error_requests for r in results),
+            avg_response_time=sum(r.avg_response_time for r in results) / len(results) if results else 0,
+            min_response_time=min(r.min_response_time for r in results) if results else 0,
+            max_response_time=max(r.max_response_time for r in results) if results else 0,
+            requests_per_second=sum(r.total_requests for r in results) / total_duration if total_duration > 0 else 0,
+            duration=total_duration,
+            cf_protection_triggered=any(r.cf_protection_triggered for r in results),
+            cf_ray_ids=all_ray_ids[:20],
+            status_code_distribution=status_dist,
+            notes=[f"Combined {len(results)} attack waves"]
+        )
     
     async def _run_attack(self, attack_type: DDoSAttackType, target: str) -> DDoSTestResult:
         """Run a specific attack type against a target."""

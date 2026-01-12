@@ -160,12 +160,23 @@ def interactive_mode():
         console.print(get_ddos_attack_menu())
         attack_choice = Prompt.ask("Select DDoS attack type", default="10")
         
-        request_count = int(Prompt.ask("Number of requests to generate", default="100"))
-        concurrency = int(Prompt.ask("Concurrent connections", default="10"))
+        use_aggressive = Confirm.ask("\n[bold yellow]Use aggressive settings?[/] (10k requests, 200 concurrency, 5 waves)", default=True)
+        
+        if use_aggressive:
+            request_count = 10000
+            concurrency = 200
+            waves = 5
+            console.print("[yellow]Using aggressive settings for DDoS testing[/]")
+        else:
+            request_count = int(Prompt.ask("Requests per wave", default="5000"))
+            concurrency = int(Prompt.ask("Concurrent connections", default="100"))
+            waves = int(Prompt.ask("Number of attack waves", default="3"))
         
         config.ddos_attack_type = int(attack_choice)
         config.request_count = request_count
         config.concurrency = concurrency
+        config.ddos_waves = waves
+        config.ddos_ramp_up = True
     
     if test_type in ["2", "3"]:
         console.print("\n")
@@ -217,12 +228,26 @@ def cli_mode(args):
         console.print("[bold red]You must accept responsibility with --accept-responsibility flag[/]")
         sys.exit(1)
     
+    if args.aggressive:
+        request_count = 10000
+        concurrency = 200
+        waves = 5
+        console.print("[bold yellow]AGGRESSIVE MODE ENABLED[/]")
+        console.print(f"[yellow]Requests: {request_count:,}, Concurrency: {concurrency}, Waves: {waves}[/]\n")
+    else:
+        request_count = args.requests
+        concurrency = args.concurrency
+        waves = args.ddos_waves
+    
     config = Config(
         targets=args.targets.split(","),
         http_engine=args.engine,
         use_bypass_techniques=args.bypass,
-        request_count=args.requests,
-        concurrency=args.concurrency
+        request_count=request_count,
+        concurrency=concurrency,
+        ddos_waves=waves,
+        ddos_wave_delay=args.ddos_wave_delay,
+        ddos_ramp_up=not args.no_ramp_up
     )
     
     test_type = "3"
@@ -261,8 +286,14 @@ Examples:
   # CLI mode - WAF testing only
   python cf_waf_tester.py --targets example.com --waf-only --waf-ruleset owasp --accept-responsibility
   
-  # CLI mode - DDoS testing
-  python cf_waf_tester.py --targets example.com --ddos-only --ddos-type 10 --requests 1000 --accept-responsibility
+  # CLI mode - DDoS testing (default: 5k requests x 3 waves = 15k total)
+  python cf_waf_tester.py --targets example.com --ddos-only --ddos-type 10 --accept-responsibility
+  
+  # CLI mode - Aggressive DDoS testing (10k requests x 5 waves = 50k total)
+  python cf_waf_tester.py --targets example.com --ddos-only --aggressive --accept-responsibility
+  
+  # CLI mode - Custom DDoS settings
+  python cf_waf_tester.py --targets example.com --ddos-only --requests 20000 --concurrency 500 --ddos-waves 5 --accept-responsibility
   
   # CLI mode - Full testing with bypass techniques
   python cf_waf_tester.py --targets example.com --bypass --engine selenium --accept-responsibility
@@ -273,11 +304,15 @@ Examples:
     parser.add_argument("-e", "--engine", choices=["aiohttp", "httpx", "requests", "selenium", "playwright", "curl_cffi", "go-http"],
                         default="aiohttp", help="HTTP request engine to use")
     parser.add_argument("-b", "--bypass", action="store_true", help="Enable Cloudflare bypass techniques")
-    parser.add_argument("-r", "--requests", type=int, default=100, help="Number of requests to generate")
-    parser.add_argument("-c", "--concurrency", type=int, default=10, help="Number of concurrent connections")
+    parser.add_argument("-r", "--requests", type=int, default=5000, help="Number of requests per wave (default: 5000)")
+    parser.add_argument("-c", "--concurrency", type=int, default=100, help="Number of concurrent connections (default: 100)")
     
     parser.add_argument("--ddos-only", action="store_true", help="Only run DDoS protection tests")
     parser.add_argument("--ddos-type", type=int, default=10, help="DDoS attack type (1-15)")
+    parser.add_argument("--ddos-waves", type=int, default=3, help="Number of attack waves (default: 3)")
+    parser.add_argument("--ddos-wave-delay", type=float, default=2.0, help="Delay between waves in seconds (default: 2.0)")
+    parser.add_argument("--no-ramp-up", action="store_true", help="Disable concurrency ramp-up between waves")
+    parser.add_argument("--aggressive", action="store_true", help="Use aggressive settings (10k requests, 200 concurrency, 5 waves)")
     
     parser.add_argument("--waf-only", action="store_true", help="Only run WAF ruleset tests")
     parser.add_argument("--waf-ruleset", choices=["owasp", "managed", "both"], default="both",
