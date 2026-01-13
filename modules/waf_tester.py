@@ -332,7 +332,7 @@ class WAFTester:
         console.print(f"  [cyan]Payload:[/] [yellow]{test_case.payload[:100]}{'...' if len(test_case.payload) > 100 else ''}[/]")
         console.print(f"  [cyan]Injection Point:[/] {test_case.injection_point}")
     
-    def _print_verbose_result(self, result: WAFTestResult):
+    def _print_verbose_result(self, result: WAFTestResult, response_body: str = None):
         """Print verbose result information."""
         if result.blocked:
             console.print(f"[bold green]Result: BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
@@ -342,12 +342,15 @@ class WAFTester:
         if result.cf_ray:
             console.print(f"[dim]CF-Ray: {result.cf_ray}[/]")
         
-        if result.raw_response:
-            console.print(f"\n[bold yellow]Server Response:[/]")
-            response_preview = result.raw_response[:1000]
-            if len(result.raw_response) > 1000:
-                response_preview += "... [truncated]"
+        console.print(f"\n[bold yellow]Server Response:[/]")
+        body = response_body or result.raw_response
+        if body and len(body) > 0:
+            response_preview = body[:1500]
+            if len(body) > 1500:
+                response_preview += "\n... [truncated]"
             console.print(f"[dim]{response_preview}[/]")
+        else:
+            console.print(f"[dim](empty response)[/]")
         
         console.print("─" * 60)
     
@@ -659,11 +662,11 @@ class WAFTester:
             response_time=response.elapsed_time,
             cf_ray=response.cf_ray,
             bypass_successful=False,
-            raw_response=response.body[:500] if response.body else None
+            raw_response=response.body[:1500] if response.body else ""
         )
         
         if verbose:
-            self._print_verbose_result(result)
+            self._print_verbose_result(result, response.body)
         
         return result
     

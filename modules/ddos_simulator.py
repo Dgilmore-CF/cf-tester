@@ -236,11 +236,14 @@ class DDoSSimulator:
         if response.blocked:
             console.print(f"[red]Blocked:[/] Yes")
         
-        if response.body:
-            body_preview = response.body[:500]
-            if len(response.body) > 500:
-                body_preview += "... [truncated]"
-            console.print(f"[dim]Body: {body_preview}[/]")
+        console.print(f"[bold yellow]Body:[/]")
+        if response.body and len(response.body) > 0:
+            body_preview = response.body[:1000]
+            if len(response.body) > 1000:
+                body_preview += "\n... [truncated]"
+            console.print(f"[dim]{body_preview}[/]")
+        else:
+            console.print(f"[dim](empty response)[/]")
         console.print("─" * 50)
     
     async def _http_get_flood(self, attack_type: DDoSAttackType, target: str) -> DDoSTestResult:
