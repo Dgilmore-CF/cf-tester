@@ -332,18 +332,22 @@ class WAFTester:
         console.print(f"  [cyan]Payload:[/] [yellow]{test_case.payload[:100]}{'...' if len(test_case.payload) > 100 else ''}[/]")
         console.print(f"  [cyan]Injection Point:[/] {test_case.injection_point}")
     
-    def _print_verbose_result(self, result: WAFTestResult, response_body: str = None):
+    def _print_verbose_result(self, result: WAFTestResult, response: 'HTTPResponse' = None):
         """Print verbose result information."""
         if result.blocked:
             console.print(f"[bold green]Result: BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
         else:
             console.print(f"[bold red]Result: NOT BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
         
+        if response and response.redirected:
+            console.print(f"[bold yellow]Redirected:[/] {response.redirect_count} redirect(s)")
+            console.print(f"[bold yellow]Final URL:[/] {response.final_url}")
+        
         if result.cf_ray:
             console.print(f"[dim]CF-Ray: {result.cf_ray}[/]")
         
         console.print(f"\n[bold yellow]Server Response:[/]")
-        body = response_body or result.raw_response
+        body = (response.body if response else None) or result.raw_response
         if body and len(body) > 0:
             response_preview = body[:1500]
             if len(body) > 1500:
@@ -666,7 +670,7 @@ class WAFTester:
         )
         
         if verbose:
-            self._print_verbose_result(result, response.body)
+            self._print_verbose_result(result, response)
         
         return result
     

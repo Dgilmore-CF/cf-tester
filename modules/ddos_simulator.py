@@ -231,6 +231,8 @@ class DDoSSimulator:
         console.print(f"\n[bold yellow]Response:[/]")
         console.print(f"[{status_color}]Status:[/] {response.status_code}")
         console.print(f"[cyan]Time:[/] {response.elapsed_time:.3f}s")
+        if response.redirected:
+            console.print(f"[yellow]Redirected:[/] {response.redirect_count} redirect(s) -> {response.final_url}")
         if response.cf_ray:
             console.print(f"[cyan]CF-Ray:[/] {response.cf_ray}")
         if response.blocked:

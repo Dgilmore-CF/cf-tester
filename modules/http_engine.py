@@ -31,6 +31,9 @@ class HTTPResponse:
     body: str
     elapsed_time: float
     request_url: str
+    final_url: Optional[str] = None
+    redirected: bool = False
+    redirect_count: int = 0
     cf_ray: Optional[str] = None
     cf_cache_status: Optional[str] = None
     blocked: bool = False
@@ -128,12 +131,16 @@ class AiohttpEngine(BaseHTTPEngine):
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=timeout),
                 ssl=kwargs.get("ssl_verify", True),
-                allow_redirects=kwargs.get("follow_redirects", True)
+                allow_redirects=kwargs.get("follow_redirects", True),
+                max_redirects=kwargs.get("max_redirects", 10)
             ) as response:
                 body = await response.text()
                 elapsed = time.time() - start_time
                 
                 resp_headers = dict(response.headers)
+                final_url = str(response.url)
+                redirected = final_url != url
+                redirect_count = len(response.history)
                 
                 http_response = HTTPResponse(
                     status_code=response.status,
@@ -141,6 +148,9 @@ class AiohttpEngine(BaseHTTPEngine):
                     body=body,
                     elapsed_time=elapsed,
                     request_url=url,
+                    final_url=final_url,
+                    redirected=redirected,
+                    redirect_count=redirect_count,
                     cf_ray=resp_headers.get("CF-RAY"),
                     cf_cache_status=resp_headers.get("CF-Cache-Status")
                 )
@@ -241,6 +251,9 @@ class HttpxEngine(BaseHTTPEngine):
             elapsed = time.time() - start_time
             
             resp_headers = dict(response.headers)
+            final_url = str(response.url)
+            redirected = final_url != url
+            redirect_count = len(response.history)
             
             http_response = HTTPResponse(
                 status_code=response.status_code,
@@ -248,6 +261,9 @@ class HttpxEngine(BaseHTTPEngine):
                 body=response.text,
                 elapsed_time=elapsed,
                 request_url=url,
+                final_url=final_url,
+                redirected=redirected,
+                redirect_count=redirect_count,
                 cf_ray=resp_headers.get("cf-ray"),
                 cf_cache_status=resp_headers.get("cf-cache-status")
             )
@@ -328,6 +344,9 @@ class RequestsEngine(BaseHTTPEngine):
             elapsed = time.time() - start_time
             
             resp_headers = dict(response.headers)
+            final_url = response.url
+            redirected = final_url != url
+            redirect_count = len(response.history)
             
             return HTTPResponse(
                 status_code=response.status_code,
@@ -335,6 +354,9 @@ class RequestsEngine(BaseHTTPEngine):
                 body=response.text,
                 elapsed_time=elapsed,
                 request_url=url,
+                final_url=final_url,
+                redirected=redirected,
+                redirect_count=redirect_count,
                 cf_ray=resp_headers.get("CF-RAY"),
                 cf_cache_status=resp_headers.get("CF-Cache-Status"),
                 blocked=response.status_code in [403, 503, 429]
