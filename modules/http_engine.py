@@ -100,8 +100,19 @@ class AiohttpEngine(BaseHTTPEngine):
     async def _get_session(self):
         if self.session is None:
             import aiohttp
-            connector = aiohttp.TCPConnector(limit=100, limit_per_host=30)
-            self.session = aiohttp.ClientSession(connector=connector)
+            import ssl
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+            connector = aiohttp.TCPConnector(
+                limit=100, 
+                limit_per_host=30,
+                ssl=ssl_context
+            )
+            self.session = aiohttp.ClientSession(
+                connector=connector,
+                trust_env=True
+            )
         return self.session
     
     async def request(
@@ -134,7 +145,15 @@ class AiohttpEngine(BaseHTTPEngine):
                 allow_redirects=kwargs.get("follow_redirects", True),
                 max_redirects=kwargs.get("max_redirects", 10)
             ) as response:
-                body = await response.text()
+                try:
+                    body = await response.text()
+                except Exception:
+                    raw_body = await response.read()
+                    try:
+                        body = raw_body.decode('utf-8', errors='replace')
+                    except Exception:
+                        body = str(raw_body[:2000])
+                
                 elapsed = time.time() - start_time
                 
                 resp_headers = dict(response.headers)
@@ -161,10 +180,11 @@ class AiohttpEngine(BaseHTTPEngine):
                 return http_response
                 
         except Exception as e:
+            logger.error(f"HTTP request error: {e}")
             return HTTPResponse(
                 status_code=0,
                 headers={},
-                body="",
+                body=f"Error: {str(e)}",
                 elapsed_time=time.time() - start_time,
                 request_url=url,
                 error=str(e)
@@ -217,6 +237,7 @@ class HttpxEngine(BaseHTTPEngine):
             self.client = httpx.AsyncClient(
                 http2=True,
                 follow_redirects=True,
+                verify=False,
                 limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
             )
         return self.client
