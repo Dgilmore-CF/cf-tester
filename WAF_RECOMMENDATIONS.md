@@ -1,28 +1,18 @@
 # Cloudflare WAF Remediation Recommendations
 
-**Generated from WAF Test Results**  
-**Protection Score: 53.8%**  
-**Tests Not Blocked: 76 of 225**
-
-**Current Configuration:**
-- OWASP Core Ruleset: Paranoia Level 4 (Maximum)
-- Anomaly Score Threshold: 25 (Most Sensitive)
-
----
-
 ## Executive Summary
 
-Despite having the OWASP Core Ruleset configured at maximum sensitivity (Paranoia Level 4, Threshold 25), several attack vectors were not blocked. This indicates that **Custom WAF Rules are required** to address gaps in the managed rulesets. The OWASP ruleset, even at its most aggressive settings, does not cover all attack patterns.
+This document provides remediation recommendations for attack vectors that may not be blocked by the Cloudflare OWASP Core Ruleset and Cloudflare Managed Ruleset, even when configured at maximum sensitivity. While these managed rulesets provide excellent baseline protection, certain attack patterns require **Custom WAF Rules** to fully mitigate.
 
-**Key Finding:** Custom WAF rules are the primary solution for these gaps, not managed ruleset tuning.
+**Key Finding:** Custom WAF rules complement managed rulesets and are essential for comprehensive protection.
 
 ---
 
 ## 1. SQL Injection (SQLi)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload |
-|-----------|---------|
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Payload |
+|-------------|---------|
 | SQLi: Basic SQLi - OR bypass | `' OR '1'='1` |
 | SQLi: SQLi with block comment | `' OR '1'='1'/*` |
 | SQLi: SQLi AND condition | `1' AND '1'='1` |
@@ -33,7 +23,7 @@ Despite having the OWASP Core Ruleset configured at maximum sensitivity (Paranoi
 
 ### Cloudflare WAF Remediation:
 
-> **Note:** OWASP Paranoia Level 4 and Threshold 25 are already at maximum sensitivity. These attacks bypass the managed ruleset and require **Custom WAF Rules**.
+> **Note:** Some SQLi patterns may bypass managed rulesets. Custom rules provide additional coverage.
 
 #### Create Custom WAF Rules
 Navigate to **Security → WAF → Custom Rules** and create:
@@ -56,18 +46,29 @@ Expression: http.request.uri.query contains "' or '" or
 Action: Block
 ```
 
-#### Check Individual OWASP Rule Actions
-Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset** and verify these specific rules are not set to "Log" or "Skip":
-- Search for rules containing "942" (SQL Injection rules)
-- Ensure action is set to **Block** or **Managed Challenge**, not **Log**
+#### Review Managed Ruleset Actions
+
+**OWASP Core Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset**
+2. Search for rules containing "942" (SQL Injection rules)
+3. Ensure action is set to **Block** or **Managed Challenge**, not **Log**
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for "SQLi" or "SQL Injection"
+3. Verify rules are set to **Block**, not **Log**
+4. Key rules to check:
+   - `100001` - SQLi - Generic RCE
+   - `100035` - SQLi in URL
+   - `100036` - SQLi in Body
 
 ---
 
 ## 2. Command Injection (CMDi)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload |
-|-----------|---------|
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Payload |
+|-------------|---------|
 | CMDi: Basic command injection | `; ls -la` |
 | CMDi: Pipe command injection | `\| cat /etc/passwd` |
 | CMDi: Ampersand command injection | `& whoami` |
@@ -79,7 +80,7 @@ Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Rules
 
 ### Cloudflare WAF Remediation:
 
-> **Note:** These attacks bypassed OWASP at Paranoia Level 4. Custom rules are required.
+> **Note:** Command injection characters are not fully covered by managed rulesets. Custom rules are recommended.
 
 #### Create Custom WAF Rules
 ```
@@ -101,13 +102,27 @@ Expression: http.request.uri contains "/etc/passwd" or
 Action: Block
 ```
 
+#### Review Managed Ruleset Actions
+
+**OWASP Core Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset**
+2. Search for rules containing "932" (Remote Command Execution rules)
+3. Ensure action is set to **Block**
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for "Command Injection" or "RCE"
+3. Key rules to check:
+   - `100008` - Command Injection
+   - `100009` - Command Injection in Headers
+
 ---
 
 ## 3. Path Traversal / Local File Inclusion (LFI)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload |
-|-----------|---------|
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Payload |
+|-------------|---------|
 | LFI: URL encoded traversal | `..%2f..%2f..%2fetc/passwd` |
 | LFI: Null byte injection | `/etc/passwd%00` |
 | LFI: Full URL encoded | `%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd` |
@@ -118,7 +133,7 @@ Action: Block
 1. Navigate to **Security → Settings**
 2. Enable **Normalize incoming URLs** - this decodes URL encoding before WAF inspection
 
-> **Note:** These encoded traversal patterns bypassed OWASP at Paranoia 4. Custom rules targeting encoded sequences are required.
+> **Note:** URL-encoded traversal patterns may bypass managed rulesets. Custom rules targeting encoded sequences provide additional coverage.
 
 #### B. Create Custom WAF Rules
 ```
@@ -141,13 +156,27 @@ Expression: http.request.uri contains "/etc/" or
 Action: Block
 ```
 
+#### Review Managed Ruleset Actions
+
+**OWASP Core Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset**
+2. Search for rules containing "930" (Local File Inclusion rules)
+3. Ensure action is set to **Block**
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for "Traversal" or "LFI"
+3. Key rules to check:
+   - `100018` - Directory Traversal
+   - `100019` - File Inclusion
+
 ---
 
 ## 4. Server-Side Request Forgery (SSRF)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload |
-|-----------|---------|
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Payload |
+|-------------|---------|
 | SSRF: Localhost SSRF | `http://localhost/admin` |
 | SSRF: Loopback SSRF | `http://127.0.0.1/admin` |
 | SSRF: IPv6 localhost SSRF | `http://[::1]/admin` |
@@ -192,15 +221,29 @@ Expression: lower(http.request.uri.query) contains "file://" or
 Action: Block
 ```
 
-> **Note:** SSRF attacks are poorly covered by OWASP even at Paranoia 4. Custom rules are essential for cloud environments.
+> **Note:** SSRF attacks targeting cloud metadata endpoints are not fully covered by managed rulesets. Custom rules are essential for cloud environments.
+
+#### Review Managed Ruleset Actions
+
+**OWASP Core Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset**
+2. Search for rules containing "934" (SSRF rules)
+3. Ensure action is set to **Block**
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for "SSRF"
+3. Key rules to check:
+   - `100015` - SSRF Attempt
+   - Rules targeting internal IP ranges
 
 ---
 
 ## 5. Server-Side Template Injection (SSTI)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload |
-|-----------|---------|
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Payload |
+|-------------|---------|
 | SSTI: Jinja2/Twig basic SSTI | `{{7*7}}` |
 | SSTI: Generic template injection | `${7*7}` |
 | SSTI: Ruby ERB injection | `<%= 7*7 %>` |
@@ -233,27 +276,44 @@ Expression: lower(http.request.uri.query) contains "{{config}}" or
 Action: Block
 ```
 
+#### Review Managed Ruleset Actions
+
+**OWASP Core Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset**
+2. Search for rules containing "941" (XSS) - some SSTI patterns overlap
+3. Ensure action is set to **Block**
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for "Template" or "Injection"
+3. SSTI coverage in managed rulesets is limited; custom rules are the primary defense
+
 ---
 
-## 6. Sensitive File Access (Cloudflare Managed Ruleset Gaps)
+## 6. Sensitive File Access
 
-### Vulnerabilities Not Blocked:
-| Test Name | Payload/Path |
-|-----------|--------------|
-| CF-Managed: Apache htaccess access | `/.htaccess` |
-| CF-Managed: Shadow file access | `/etc/shadow` |
-| CF-Managed: AWS credentials access | `/.aws/credentials` |
-| CF-Managed: Environment file access | `/.env` |
-| CF-Managed: Go pprof debug access | `/debug/pprof/` |
-| CF-Managed: Apache server status | `/server-status` |
-| CF-Managed: WordPress debug log | `/wp-content/debug.log` |
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Path |
+|-------------|--------------|
+| Apache htaccess access | `/.htaccess` |
+| Shadow file access | `/etc/shadow` |
+| AWS credentials access | `/.aws/credentials` |
+| Environment file access | `/.env` |
+| Go pprof debug access | `/debug/pprof/` |
+| Apache server status | `/server-status` |
+| WordPress debug log | `/wp-content/debug.log` |
 
 ### Cloudflare WAF Remediation:
 
-#### A. Review Cloudflare Managed Ruleset
+#### A. Review Managed Ruleset Actions
+
+**Cloudflare Managed Ruleset:**
 1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
-2. Search for rules related to sensitive files and verify they are set to **Block**, not **Log**
-3. Note: The Managed Ruleset uses individual rules, not category toggles
+2. Search for "Sensitive" or "Config"
+3. Key rules to check:
+   - Rules blocking access to `.env`, `.git`, `.htaccess`
+   - Rules blocking debug endpoints
+4. Verify rules are set to **Block**, not **Log**
 
 #### B. Create Custom Rules for Sensitive Paths
 ```
@@ -280,13 +340,13 @@ Action: Block
 
 ## 7. Scanner Detection
 
-### Vulnerabilities Not Blocked:
-| Test Name | User-Agent Pattern |
-|-----------|-------------------|
-| Scanner: Nikto scanner UA | `Nikto` |
-| Scanner: SQLmap scanner UA | `sqlmap` |
-| Scanner: ZAP scanner UA | `ZAP` |
-| Scanner: Acunetix scanner UA | `Acunetix` |
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | User-Agent Pattern |
+|-------------|-------------------|
+| Nikto scanner | `Nikto` |
+| SQLmap scanner | `sqlmap` |
+| ZAP scanner | `ZAP` |
+| Acunetix scanner | `Acunetix` |
 
 ### Cloudflare WAF Remediation:
 
@@ -319,23 +379,26 @@ Action: Block
 
 ## 8. CMS-Specific Attacks (WordPress, Joomla, Drupal)
 
-### Vulnerabilities Not Blocked:
-| Test Name | Path |
-|-----------|------|
-| CF-Managed: WordPress SQLi | Various WP endpoints |
-| CF-Managed: phpMyAdmin access | `/phpmyadmin/` |
-| CF-Managed: Joomla admin access | `/administrator/` |
-| CF-Managed: Drupal settings access | `/sites/default/settings.php` |
+### Attack Patterns That May Bypass Managed Rules:
+| Attack Type | Example Path |
+|-------------|------|
+| WordPress SQLi | Various WP endpoints |
+| phpMyAdmin access | `/phpmyadmin/` |
+| Joomla admin access | `/administrator/` |
+| Drupal settings access | `/sites/default/settings.php` |
 
 ### Cloudflare WAF Remediation:
 
-#### A. Enable CMS-Specific Rules
-1. Navigate to **Security → WAF → Managed Rules → Cloudflare Managed Ruleset**
-2. Enable and set to **Block**:
-   - WordPress rules (if using WordPress)
-   - Joomla rules (if using Joomla)
-   - Drupal rules (if using Drupal)
-   - PHP rules
+#### A. Review Managed Ruleset Actions
+
+**Cloudflare Managed Ruleset:**
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for your CMS name (WordPress, Joomla, Drupal)
+3. Key rules to check:
+   - WordPress-specific SQLi and RCE rules
+   - Admin panel protection rules
+   - PHP-specific vulnerability rules
+4. Verify rules are set to **Block**, not **Log**
 
 #### B. Block Admin Panel Access by IP
 ```
@@ -365,9 +428,8 @@ Action: Block
 
 ## Quick Implementation Checklist
 
-> **Current Config:** OWASP Paranoia Level 4, Threshold 25 (already at maximum). Focus on Custom Rules.
-
 ### Custom WAF Rules (Priority)
+These custom rules address gaps in managed rulesets:
 - [ ] Create custom rule: Block SSRF cloud metadata IPs (169.254.169.254, metadata.google.internal)
 - [ ] Create custom rule: Block command injection characters (`|`, `;`, `&&`, `` ` ``, `$()`)
 - [ ] Create custom rule: Block template injection syntax (`{{`, `${`, `<%`)
@@ -376,11 +438,15 @@ Action: Block
 - [ ] Create custom rule: Block sensitive file paths (`.env`, `.htaccess`, `/debug/`)
 - [ ] Create custom rule: Block known scanner User-Agents
 
+### Managed Ruleset Review
+- [ ] Review OWASP Core Ruleset rules - ensure set to Block, not Log
+- [ ] Review Cloudflare Managed Ruleset rules - ensure set to Block, not Log
+- [ ] Verify CMS-specific rules are enabled if applicable
+
 ### Additional Settings
 - [ ] Enable URL normalization (**Security → Settings**)
 - [ ] Enable Bot Fight Mode (**Security → Bots**)
 - [ ] Configure rate limiting rules (**Security → WAF → Rate limiting rules**)
-- [ ] Review individual Managed Ruleset rules - ensure set to Block, not Log
 
 ---
 
