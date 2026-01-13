@@ -56,11 +56,7 @@ Action: Block
 **Cloudflare Managed Ruleset:**
 1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
 2. Search for "SQLi" or "SQL Injection"
-3. Verify rules are set to **Block**, not **Log**
-4. Key rules to check:
-   - `100001` - SQLi - Generic RCE
-   - `100035` - SQLi in URL
-   - `100036` - SQLi in Body
+3. Review all matching rules and verify they are set to **Block**, not **Log**
 
 ---
 
@@ -112,9 +108,7 @@ Action: Block
 **Cloudflare Managed Ruleset:**
 1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
 2. Search for "Command Injection" or "RCE"
-3. Key rules to check:
-   - `100008` - Command Injection
-   - `100009` - Command Injection in Headers
+3. Review all matching rules and verify they are set to **Block**, not **Log**
 
 ---
 
@@ -165,10 +159,8 @@ Action: Block
 
 **Cloudflare Managed Ruleset:**
 1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
-2. Search for "Traversal" or "LFI"
-3. Key rules to check:
-   - `100018` - Directory Traversal
-   - `100019` - File Inclusion
+2. Search for "Traversal" or "LFI" or "File Inclusion"
+3. Review all matching rules and verify they are set to **Block**, not **Log**
 
 ---
 
@@ -232,10 +224,8 @@ Action: Block
 
 **Cloudflare Managed Ruleset:**
 1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
-2. Search for "SSRF"
-3. Key rules to check:
-   - `100015` - SSRF Attempt
-   - Rules targeting internal IP ranges
+2. Search for "SSRF" or "Server-Side Request"
+3. Review all matching rules and verify they are set to **Block**, not **Log**
 
 ---
 
