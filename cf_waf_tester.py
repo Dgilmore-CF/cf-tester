@@ -190,12 +190,12 @@ def interactive_mode():
         }
         config.waf_ruleset = ruleset_map[ruleset_choice]
     
-    run_tests(config, test_type)
+    run_tests(config, test_type, output_file=None)
 
 
-def run_tests(config: Config, test_type: str):
+def run_tests(config: Config, test_type: str, output_file: str = None):
     """Execute the configured tests."""
-    reporter = Reporter()
+    reporter = Reporter(output_file=output_file)
     
     console.print("\n[bold green]Starting tests...[/]\n")
     
@@ -272,7 +272,7 @@ def cli_mode(args):
         }
         config.waf_ruleset = ruleset_map.get(args.waf_ruleset, WAFRuleset.BOTH)
     
-    run_tests(config, test_type)
+    run_tests(config, test_type, output_file=args.output)
 
 
 def main():

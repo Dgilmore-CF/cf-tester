@@ -315,13 +315,21 @@ class Reporter:
                     "test_name": r.test_case.name,
                     "category": r.test_case.category,
                     "ruleset": r.test_case.ruleset,
+                    "description": r.test_case.description,
+                    "payload": r.test_case.payload,
+                    "injection_point": r.test_case.injection_point,
+                    "cwe_id": r.test_case.cwe_id,
+                    "owasp_category": r.test_case.owasp_category,
+                    "cve_id": getattr(r.test_case, 'cve_id', None),
                     "target": r.target,
                     "response_code": r.response_code,
                     "blocked": r.blocked,
                     "challenge_presented": r.challenge_presented,
                     "bypass_successful": r.bypass_successful,
                     "bypass_technique": r.bypass_technique,
-                    "response_time": r.response_time
+                    "response_time": r.response_time,
+                    "cf_ray": r.cf_ray,
+                    "raw_response": r.raw_response[:500] if r.raw_response else None
                 }
                 for r in self.waf_results
             ],
