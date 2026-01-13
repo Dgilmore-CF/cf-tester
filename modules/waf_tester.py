@@ -339,12 +339,13 @@ class WAFTester:
         else:
             console.print(f"[bold red]Result: NOT BLOCKED[/] (Status: {result.response_code}, Time: {result.response_time:.3f}s)")
         
-        if response and response.redirected:
-            console.print(f"[bold yellow]Redirected:[/] {response.redirect_count} redirect(s)")
-            console.print(f"[bold yellow]Final URL:[/] {response.final_url}")
+        cf_ray = result.cf_ray or (response.cf_ray if response else None)
+        if cf_ray:
+            console.print(f"[cyan]CF-Ray:[/] {cf_ray}")
         
-        if result.cf_ray:
-            console.print(f"[dim]CF-Ray: {result.cf_ray}[/]")
+        if response and response.redirected:
+            console.print(f"[yellow]Redirected:[/] {response.redirect_count} redirect(s)")
+            console.print(f"[yellow]Final URL:[/] {response.final_url}")
         
         console.print(f"\n[bold yellow]Server Response:[/]")
         body = (response.body if response else None) or result.raw_response

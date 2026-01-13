@@ -175,7 +175,7 @@ class AiohttpEngine(BaseHTTPEngine):
                 )
                 
                 http_response.blocked = self._detect_block(response.status, body)
-                http_response.challenge_presented = self._detect_challenge(body)
+                http_response.challenge_presented = self._detect_challenge(body, response.status)
                 
                 return http_response
                 
@@ -204,16 +204,17 @@ class AiohttpEngine(BaseHTTPEngine):
             return any(indicator in body_lower for indicator in block_indicators)
         return False
     
-    def _detect_challenge(self, body: str) -> bool:
+    def _detect_challenge(self, body: str, status: int) -> bool:
         """Detect if a Cloudflare challenge was presented."""
+        if status == 200:
+            return False
+        
         challenge_indicators = [
             "cf-browser-verification",
             "challenge-platform",
-            "turnstile",
-            "hcaptcha",
-            "recaptcha",
             "jschl_vc",
-            "jschl_answer"
+            "jschl_answer",
+            "cf-chl-bypass"
         ]
         body_lower = body.lower()
         return any(indicator in body_lower for indicator in challenge_indicators)
@@ -290,7 +291,7 @@ class HttpxEngine(BaseHTTPEngine):
             )
             
             http_response.blocked = response.status_code in [403, 503, 429]
-            http_response.challenge_presented = "challenge" in response.text.lower()
+            http_response.challenge_presented = False if response.status_code == 200 else "cf-browser-verification" in response.text.lower()
             
             return http_response
             
