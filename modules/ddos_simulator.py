@@ -216,6 +216,33 @@ class DDoSSimulator:
         handler = attack_handlers.get(attack_type, self._http_get_flood)
         return await handler(attack_type, target)
     
+    def _print_verbose_request(self, request_num: int, method: str, url: str, 
+                                  params: dict, headers: dict, response: 'HTTPResponse'):
+        """Print verbose request/response information."""
+        console.print(f"\n[bold white on blue] Request #{request_num} [/]")
+        console.print(f"[cyan]Method:[/] {method}")
+        console.print(f"[cyan]URL:[/] {url}")
+        if params:
+            console.print(f"[cyan]Params:[/] {params}")
+        if headers:
+            console.print(f"[cyan]Headers:[/] {headers}")
+        
+        status_color = "green" if response.status_code < 400 else "red"
+        console.print(f"\n[bold yellow]Response:[/]")
+        console.print(f"[{status_color}]Status:[/] {response.status_code}")
+        console.print(f"[cyan]Time:[/] {response.elapsed_time:.3f}s")
+        if response.cf_ray:
+            console.print(f"[cyan]CF-Ray:[/] {response.cf_ray}")
+        if response.blocked:
+            console.print(f"[red]Blocked:[/] Yes")
+        
+        if response.body:
+            body_preview = response.body[:500]
+            if len(response.body) > 500:
+                body_preview += "... [truncated]"
+            console.print(f"[dim]Body: {body_preview}[/]")
+        console.print("─" * 50)
+    
     async def _http_get_flood(self, attack_type: DDoSAttackType, target: str) -> DDoSTestResult:
         """HTTP GET flood attack simulation."""
         responses: List[HTTPResponse] = []
@@ -223,8 +250,12 @@ class DDoSSimulator:
         self.completed_requests = 0
         self.blocked_count = 0
         self.success_count = 0
+        verbose_sample_rate = max(1, self.config.request_count // 10) if self.config.verbose else 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
+        
+        if self.config.verbose:
+            console.print(f"[dim]Verbose mode: showing every {verbose_sample_rate}th request[/]")
         
         with Progress(
             SpinnerColumn(),
@@ -237,7 +268,8 @@ class DDoSSimulator:
             TextColumn("|"),
             TimeElapsedColumn(),
             console=console,
-            refresh_per_second=10
+            refresh_per_second=10,
+            disable=self.config.verbose
         ) as progress:
             task = progress.add_task(
                 "HTTP GET Flood",
@@ -266,6 +298,9 @@ class DDoSSimulator:
                     elif response.status_code in range(200, 400):
                         self.success_count += 1
                     
+                    if self.config.verbose and (i == 0 or (i + 1) % verbose_sample_rate == 0 or response.blocked):
+                        self._print_verbose_request(i + 1, "GET", target, params, {}, response)
+                    
                     progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
             
             tasks = [make_request(i) for i in range(self.config.request_count)]
@@ -281,8 +316,12 @@ class DDoSSimulator:
         self.completed_requests = 0
         self.blocked_count = 0
         self.success_count = 0
+        verbose_sample_rate = max(1, self.config.request_count // 10) if self.config.verbose else 0
         
         semaphore = asyncio.Semaphore(self.config.concurrency)
+        
+        if self.config.verbose:
+            console.print(f"[dim]Verbose mode: showing every {verbose_sample_rate}th request[/]")
         
         with Progress(
             SpinnerColumn(),
@@ -295,7 +334,8 @@ class DDoSSimulator:
             TextColumn("|"),
             TimeElapsedColumn(),
             console=console,
-            refresh_per_second=10
+            refresh_per_second=10,
+            disable=self.config.verbose
         ) as progress:
             task = progress.add_task(
                 "HTTP POST Flood",
@@ -311,12 +351,13 @@ class DDoSSimulator:
                         "timestamp": str(time.time()),
                         "id": str(random.randint(1, 1000000))
                     }
+                    headers = {"Content-Type": "application/x-www-form-urlencoded"}
                     
                     response = await self.http_engine.request(
                         target,
                         HTTPMethod.POST,
                         data=data,
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        headers=headers,
                         timeout=self.config.timeout
                     )
                     responses.append(response)
@@ -325,6 +366,9 @@ class DDoSSimulator:
                         self.blocked_count += 1
                     elif response.status_code in range(200, 400):
                         self.success_count += 1
+                    
+                    if self.config.verbose and (i == 0 or (i + 1) % verbose_sample_rate == 0 or response.blocked):
+                        self._print_verbose_request(i + 1, "POST", target, {}, headers, response)
                     
                     progress.update(task, advance=1, success=self.success_count, blocked=self.blocked_count)
             

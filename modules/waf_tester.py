@@ -341,6 +341,14 @@ class WAFTester:
         
         if result.cf_ray:
             console.print(f"[dim]CF-Ray: {result.cf_ray}[/]")
+        
+        if result.raw_response:
+            console.print(f"\n[bold yellow]Server Response:[/]")
+            response_preview = result.raw_response[:1000]
+            if len(result.raw_response) > 1000:
+                response_preview += "... [truncated]"
+            console.print(f"[dim]{response_preview}[/]")
+        
         console.print("─" * 60)
     
     async def run(self) -> List[WAFTestResult]:
