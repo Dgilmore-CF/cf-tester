@@ -397,31 +397,76 @@ class Reporter:
                 ""
             ])
             
-            for r in report_data['waf_results']:
+            for i, r in enumerate(report_data['waf_results'], 1):
                 status = "BLOCKED" if r['blocked'] else "NOT BLOCKED"
                 lines.extend([
-                    f"Test: {r['test_name']}",
-                    f"  Category: {r['category']}",
-                    f"  Payload: {r['payload'][:100]}{'...' if len(r['payload']) > 100 else ''}",
-                    f"  Status: {status} (HTTP {r['response_code']})",
-                    f"  Response Time: {r['response_time']:.3f}s",
+                    f"Test {i}/{len(report_data['waf_results'])}",
+                    "",
+                    "TEST CASE",
+                    f"Name: {r['test_name']}",
+                    f"Category: {r['category']}",
+                    f"Description: {r.get('description', 'N/A')}",
                 ])
-                if r.get('cf_ray'):
-                    lines.append(f"  CF-Ray: {r['cf_ray']}")
+                
                 if r.get('cwe_id'):
-                    lines.append(f"  CWE: {r['cwe_id']}")
+                    cwe_url = f"https://cwe.mitre.org/data/definitions/{r['cwe_id'].replace('CWE-', '')}.html"
+                    lines.append(f"CWE: {r['cwe_id']} - {cwe_url}")
+                
                 if r.get('owasp_category'):
-                    lines.append(f"  OWASP: {r['owasp_category']}")
+                    lines.append(f"OWASP: {r['owasp_category']}")
+                    owasp_map = {
+                        "A01:2021": "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+                        "A02:2021": "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+                        "A03:2021": "https://owasp.org/Top10/A03_2021-Injection/",
+                        "A04:2021": "https://owasp.org/Top10/A04_2021-Insecure_Design/",
+                        "A05:2021": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+                        "A06:2021": "https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/",
+                        "A07:2021": "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+                        "A08:2021": "https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/",
+                        "A09:2021": "https://owasp.org/Top10/A09_2021-Security_Logging_and_Monitoring_Failures/",
+                        "A10:2021": "https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/",
+                    }
+                    owasp_key = r['owasp_category'].split('-')[0] if r['owasp_category'] else None
+                    if owasp_key and owasp_key in owasp_map:
+                        lines.append(f"OWASP Doc: {owasp_map[owasp_key]}")
+                
                 if r.get('cve_id'):
-                    lines.append(f"  CVE: {r['cve_id']}")
+                    cve_url = f"https://nvd.nist.gov/vuln/detail/{r['cve_id']}"
+                    lines.append(f"CVE: {r['cve_id']} - {cve_url}")
+                
+                lines.extend([
+                    "",
+                    "HTTP Request:",
+                    f"  Method: GET",
+                    f"  URL: {r['target']}",
+                    f"  Payload: {r['payload'][:100]}{'...' if len(r['payload']) > 100 else ''}",
+                    f"  Injection Point: {r.get('injection_point', 'N/A')}",
+                    "",
+                    f"Result: {status} (Status: {r['response_code']}, Time: {r['response_time']:.3f}s)",
+                ])
+                
+                if r.get('cf_ray'):
+                    lines.append(f"CF-Ray: {r['cf_ray']}")
+                
                 lines.append("")
+                lines.append("Server Response:")
+                if r.get('raw_response'):
+                    lines.append(r['raw_response'])
+                else:
+                    lines.append("(empty response)")
+                
+                lines.extend([
+                    "",
+                    "-" * 60,
+                    ""
+                ])
             
             bypasses = [r for r in report_data['waf_results'] if r['bypass_successful']]
             if bypasses:
                 lines.extend([
-                    "-" * 60,
+                    "=" * 60,
                     "BYPASSES FOUND",
-                    "-" * 60,
+                    "=" * 60,
                 ])
                 for r in bypasses:
                     lines.append(f"  - {r['test_name']}: {r['bypass_technique']}")

