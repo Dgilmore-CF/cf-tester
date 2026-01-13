@@ -4,11 +4,17 @@
 **Protection Score: 53.8%**  
 **Tests Not Blocked: 76 of 225**
 
+**Current Configuration:**
+- OWASP Core Ruleset: Paranoia Level 4 (Maximum)
+- Anomaly Score Threshold: 25 (Most Sensitive)
+
 ---
 
 ## Executive Summary
 
-The WAF testing identified several vulnerability categories where attacks were not blocked by the current Cloudflare WAF configuration. This document provides specific remediation steps for each category using Cloudflare's WAF features.
+Despite having the OWASP Core Ruleset configured at maximum sensitivity (Paranoia Level 4, Threshold 25), several attack vectors were not blocked. This indicates that **Custom WAF Rules are required** to address gaps in the managed rulesets. The OWASP ruleset, even at its most aggressive settings, does not cover all attack patterns.
+
+**Key Finding:** Custom WAF rules are the primary solution for these gaps, not managed ruleset tuning.
 
 ---
 
@@ -27,14 +33,9 @@ The WAF testing identified several vulnerability categories where attacks were n
 
 ### Cloudflare WAF Remediation:
 
-#### A. Enable OWASP Core Ruleset with Higher Paranoia Level
-1. Navigate to **Security → WAF → Managed Rules**
-2. Enable **Cloudflare OWASP Core Ruleset**
-3. Click **Configure** on the OWASP ruleset
-4. Set **Paranoia Level to 2 or 3** (higher levels catch more evasion techniques)
-5. Set **Anomaly Score Threshold** to **Medium (25)** or **Low (10)**
+> **Note:** OWASP Paranoia Level 4 and Threshold 25 are already at maximum sensitivity. These attacks bypass the managed ruleset and require **Custom WAF Rules**.
 
-#### B. Create Custom WAF Rules
+#### Create Custom WAF Rules
 Navigate to **Security → WAF → Custom Rules** and create:
 
 ```
@@ -55,11 +56,10 @@ Expression: http.request.uri.query contains "' or '" or
 Action: Block
 ```
 
-#### C. Enable Specific OWASP Rules
-In **Managed Rules → OWASP**, ensure these rule groups are set to **Block**:
-- **942100-942999**: SQL Injection Attack rules
-- **942200**: SQL Comment Sequence Detection
-- **942260**: SQL Injection bypass via tautology
+#### Check Individual OWASP Rule Actions
+Navigate to **Security → WAF → Managed rules → Cloudflare OWASP Core Ruleset** and verify these specific rules are not set to "Log" or "Skip":
+- Search for rules containing "942" (SQL Injection rules)
+- Ensure action is set to **Block** or **Managed Challenge**, not **Log**
 
 ---
 
@@ -79,12 +79,9 @@ In **Managed Rules → OWASP**, ensure these rule groups are set to **Block**:
 
 ### Cloudflare WAF Remediation:
 
-#### A. Enable OWASP Command Injection Rules
-1. Navigate to **Security → WAF → Managed Rules → OWASP**
-2. Enable rule group **932100-932999** (Remote Command Execution)
-3. Set action to **Block**
+> **Note:** These attacks bypassed OWASP at Paranoia Level 4. Custom rules are required.
 
-#### B. Create Custom WAF Rules
+#### Create Custom WAF Rules
 ```
 Rule 1: Block Shell Command Characters
 Expression: http.request.uri.query contains "|" or
@@ -104,11 +101,6 @@ Expression: http.request.uri contains "/etc/passwd" or
 Action: Block
 ```
 
-#### C. Enable Cloudflare Managed Ruleset
-1. Navigate to **Security → WAF → Managed Rules**
-2. Enable **Cloudflare Managed Ruleset**
-3. Ensure **Command Injection** category is set to **Block**
-
 ---
 
 ## 3. Path Traversal / Local File Inclusion (LFI)
@@ -123,15 +115,12 @@ Action: Block
 ### Cloudflare WAF Remediation:
 
 #### A. Enable URL Normalization
-1. Navigate to **Rules → Settings**
+1. Navigate to **Security → Settings**
 2. Enable **Normalize incoming URLs** - this decodes URL encoding before WAF inspection
 
-#### B. Enable OWASP LFI Rules
-1. Navigate to **Security → WAF → Managed Rules → OWASP**
-2. Enable rule group **930100-930199** (Local File Inclusion)
-3. Set action to **Block**
+> **Note:** These encoded traversal patterns bypassed OWASP at Paranoia 4. Custom rules targeting encoded sequences are required.
 
-#### C. Create Custom WAF Rules
+#### B. Create Custom WAF Rules
 ```
 Rule 1: Block Path Traversal (Encoded)
 Expression: http.request.uri contains "%2e%2e" or
@@ -203,10 +192,7 @@ Expression: lower(http.request.uri.query) contains "file://" or
 Action: Block
 ```
 
-#### B. Enable OWASP SSRF Rules
-1. Navigate to **Security → WAF → Managed Rules → OWASP**
-2. Enable rule group **934100-934199** (SSRF Attack)
-3. Set Paranoia Level to 2+
+> **Note:** SSRF attacks are poorly covered by OWASP even at Paranoia 4. Custom rules are essential for cloud environments.
 
 ---
 
@@ -264,14 +250,10 @@ Action: Block
 
 ### Cloudflare WAF Remediation:
 
-#### A. Enable Cloudflare Managed Ruleset Categories
-1. Navigate to **Security → WAF → Managed Rules → Cloudflare Managed Ruleset**
-2. Click **Configure**
-3. Set the following categories to **Block**:
-   - **Sensitive Files**
-   - **Debug Endpoints**
-   - **Cloud Credentials**
-   - **WordPress** (if applicable)
+#### A. Review Cloudflare Managed Ruleset
+1. Navigate to **Security → WAF → Managed rules → Cloudflare Managed Ruleset**
+2. Search for rules related to sensitive files and verify they are set to **Block**, not **Log**
+3. Note: The Managed Ruleset uses individual rules, not category toggles
 
 #### B. Create Custom Rules for Sensitive Paths
 ```
@@ -383,16 +365,22 @@ Action: Block
 
 ## Quick Implementation Checklist
 
-- [ ] Enable OWASP Core Ruleset with Paranoia Level 2
-- [ ] Set OWASP Anomaly Threshold to Medium (25)
-- [ ] Enable all Cloudflare Managed Ruleset categories
-- [ ] Create custom rules for SSRF (cloud metadata IPs)
-- [ ] Create custom rules for command injection characters
-- [ ] Create custom rules for template injection syntax
-- [ ] Enable URL normalization
-- [ ] Enable Bot Fight Mode
-- [ ] Configure rate limiting
-- [ ] Block access to sensitive file paths
+> **Current Config:** OWASP Paranoia Level 4, Threshold 25 (already at maximum). Focus on Custom Rules.
+
+### Custom WAF Rules (Priority)
+- [ ] Create custom rule: Block SSRF cloud metadata IPs (169.254.169.254, metadata.google.internal)
+- [ ] Create custom rule: Block command injection characters (`|`, `;`, `&&`, `` ` ``, `$()`)
+- [ ] Create custom rule: Block template injection syntax (`{{`, `${`, `<%`)
+- [ ] Create custom rule: Block SQL keywords in query strings (ORDER BY, GROUP BY, SHUTDOWN)
+- [ ] Create custom rule: Block path traversal encoded sequences (`%2e%2e`, `%00`)
+- [ ] Create custom rule: Block sensitive file paths (`.env`, `.htaccess`, `/debug/`)
+- [ ] Create custom rule: Block known scanner User-Agents
+
+### Additional Settings
+- [ ] Enable URL normalization (**Security → Settings**)
+- [ ] Enable Bot Fight Mode (**Security → Bots**)
+- [ ] Configure rate limiting rules (**Security → WAF → Rate limiting rules**)
+- [ ] Review individual Managed Ruleset rules - ensure set to Block, not Log
 
 ---
 
