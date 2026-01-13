@@ -677,27 +677,24 @@ class WAFTester:
     def _is_blocked(self, response: HTTPResponse) -> bool:
         """Determine if a request was blocked by WAF."""
         if response.status_code in [403, 406, 429, 503]:
+            block_indicators = [
+                "blocked",
+                "access denied", 
+                "forbidden",
+                "attention required",
+                "security check",
+                "please wait",
+                "checking your browser",
+                "ray id",
+            ]
+            if response.body:
+                body_lower = response.body.lower()
+                if any(indicator in body_lower for indicator in block_indicators):
+                    return True
             return True
         
-        if response.blocked or response.challenge_presented:
+        if response.challenge_presented:
             return True
-        
-        block_indicators = [
-            "blocked",
-            "access denied",
-            "forbidden",
-            "ray id",
-            "cloudflare",
-            "attention required",
-            "security check",
-            "waf",
-            "firewall"
-        ]
-        
-        if response.body:
-            body_lower = response.body.lower()
-            if any(indicator in body_lower for indicator in block_indicators):
-                return True
         
         return False
     
