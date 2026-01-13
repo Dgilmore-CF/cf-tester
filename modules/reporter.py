@@ -394,11 +394,35 @@ class Reporter:
                 "-" * 60,
                 "WAF TEST RESULTS",
                 "-" * 60,
+                ""
             ])
+            
+            for r in report_data['waf_results']:
+                status = "BLOCKED" if r['blocked'] else "NOT BLOCKED"
+                lines.extend([
+                    f"Test: {r['test_name']}",
+                    f"  Category: {r['category']}",
+                    f"  Payload: {r['payload'][:100]}{'...' if len(r['payload']) > 100 else ''}",
+                    f"  Status: {status} (HTTP {r['response_code']})",
+                    f"  Response Time: {r['response_time']:.3f}s",
+                ])
+                if r.get('cf_ray'):
+                    lines.append(f"  CF-Ray: {r['cf_ray']}")
+                if r.get('cwe_id'):
+                    lines.append(f"  CWE: {r['cwe_id']}")
+                if r.get('owasp_category'):
+                    lines.append(f"  OWASP: {r['owasp_category']}")
+                if r.get('cve_id'):
+                    lines.append(f"  CVE: {r['cve_id']}")
+                lines.append("")
             
             bypasses = [r for r in report_data['waf_results'] if r['bypass_successful']]
             if bypasses:
-                lines.append("BYPASSES FOUND:")
+                lines.extend([
+                    "-" * 60,
+                    "BYPASSES FOUND",
+                    "-" * 60,
+                ])
                 for r in bypasses:
                     lines.append(f"  - {r['test_name']}: {r['bypass_technique']}")
                 lines.append("")
