@@ -4,6 +4,8 @@ import asyncio
 import random
 import subprocess
 import json
+import tempfile
+import urllib.parse
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, List, Optional, Any, Tuple
@@ -69,6 +71,26 @@ class BaseHTTPEngine(ABC):
             headers.update(custom_headers)
         
         return headers
+
+    @staticmethod
+    def response_header(headers: Dict[str, str], name: str) -> Optional[str]:
+        """Read a response header without depending on adapter-specific casing."""
+        name = name.lower()
+        return next((value for key, value in headers.items() if key.lower() == name), None)
+
+    @staticmethod
+    def detect_cloudflare_block(status: int, body: str) -> bool:
+        """Require Cloudflare evidence instead of treating every error status as a block."""
+        if status not in (403, 406, 429, 503):
+            return False
+        body_lower = body.lower()
+        return any(indicator in body_lower for indicator in (
+            "cloudflare",
+            "cf-browser-verification",
+            "challenge-platform",
+            "attention required",
+            "ray id",
+        ))
     
     @abstractmethod
     async def request(
@@ -158,8 +180,8 @@ class AiohttpEngine(BaseHTTPEngine):
                 
                 resp_headers = dict(response.headers)
                 final_url = str(response.url)
-                redirected = final_url != url
                 redirect_count = len(response.history)
+                redirected = redirect_count > 0
                 
                 http_response = HTTPResponse(
                     status_code=response.status,
@@ -170,8 +192,8 @@ class AiohttpEngine(BaseHTTPEngine):
                     final_url=final_url,
                     redirected=redirected,
                     redirect_count=redirect_count,
-                    cf_ray=resp_headers.get("CF-RAY"),
-                    cf_cache_status=resp_headers.get("CF-Cache-Status")
+                    cf_ray=self.response_header(resp_headers, "CF-Ray"),
+                    cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status")
                 )
                 
                 http_response.blocked = self._detect_block(response.status, body)
@@ -192,17 +214,7 @@ class AiohttpEngine(BaseHTTPEngine):
     
     def _detect_block(self, status: int, body: str) -> bool:
         """Detect if the request was blocked by Cloudflare."""
-        if status in [403, 503, 429]:
-            block_indicators = [
-                "cloudflare",
-                "cf-browser-verification",
-                "blocked",
-                "access denied",
-                "ray id"
-            ]
-            body_lower = body.lower()
-            return any(indicator in body_lower for indicator in block_indicators)
-        return False
+        return self.detect_cloudflare_block(status, body)
     
     def _detect_challenge(self, body: str, status: int) -> bool:
         """Detect if a Cloudflare challenge was presented."""
@@ -237,8 +249,6 @@ class HttpxEngine(BaseHTTPEngine):
             import httpx
             self.client = httpx.AsyncClient(
                 http2=True,
-                follow_redirects=True,
-                verify=False,
                 limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
             )
         return self.client
@@ -262,20 +272,22 @@ class HttpxEngine(BaseHTTPEngine):
         start_time = time.time()
         
         try:
+            body_argument = {"content": data} if isinstance(data, (str, bytes)) else {"data": data}
             response = await client.request(
                 method.value,
                 url,
                 headers=prepared_headers,
-                data=data,
                 params=params,
-                timeout=timeout
+                timeout=timeout,
+                follow_redirects=kwargs.get("follow_redirects", True),
+                **body_argument,
             )
             elapsed = time.time() - start_time
             
             resp_headers = dict(response.headers)
             final_url = str(response.url)
-            redirected = final_url != url
             redirect_count = len(response.history)
+            redirected = redirect_count > 0
             
             http_response = HTTPResponse(
                 status_code=response.status_code,
@@ -286,11 +298,11 @@ class HttpxEngine(BaseHTTPEngine):
                 final_url=final_url,
                 redirected=redirected,
                 redirect_count=redirect_count,
-                cf_ray=resp_headers.get("cf-ray"),
-                cf_cache_status=resp_headers.get("cf-cache-status")
+                cf_ray=self.response_header(resp_headers, "CF-Ray"),
+                cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status")
             )
             
-            http_response.blocked = response.status_code in [403, 503, 429]
+            http_response.blocked = self.detect_cloudflare_block(response.status_code, response.text)
             http_response.challenge_presented = False if response.status_code == 200 else "cf-browser-verification" in response.text.lower()
             
             return http_response
@@ -367,8 +379,8 @@ class RequestsEngine(BaseHTTPEngine):
             
             resp_headers = dict(response.headers)
             final_url = response.url
-            redirected = final_url != url
             redirect_count = len(response.history)
+            redirected = redirect_count > 0
             
             return HTTPResponse(
                 status_code=response.status_code,
@@ -379,9 +391,9 @@ class RequestsEngine(BaseHTTPEngine):
                 final_url=final_url,
                 redirected=redirected,
                 redirect_count=redirect_count,
-                cf_ray=resp_headers.get("CF-RAY"),
-                cf_cache_status=resp_headers.get("CF-Cache-Status"),
-                blocked=response.status_code in [403, 503, 429]
+                cf_ray=self.response_header(resp_headers, "CF-Ray"),
+                cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status"),
+                blocked=self.detect_cloudflare_block(response.status_code, response.text)
             )
             
         except Exception as e:
@@ -446,6 +458,19 @@ class SeleniumEngine(BaseHTTPEngine):
         **kwargs
     ) -> HTTPResponse:
         import time
+
+        if method != HTTPMethod.GET or data is not None:
+            return HTTPResponse(
+                status_code=0,
+                headers={},
+                body="",
+                elapsed_time=0,
+                request_url=url,
+                error="Selenium engine supports GET navigation only",
+            )
+        if params:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}{urllib.parse.urlencode(params, doseq=True)}"
         
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
@@ -555,13 +580,26 @@ class PlaywrightEngine(BaseHTTPEngine):
         start_time = time.time()
         
         try:
-            if headers:
-                await page.set_extra_http_headers(headers)
-            
-            response = await page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
-            
+            if method == HTTPMethod.GET and data is None:
+                if params:
+                    separator = "&" if "?" in url else "?"
+                    url = f"{url}{separator}{urllib.parse.urlencode(params, doseq=True)}"
+                if headers:
+                    await page.set_extra_http_headers(headers)
+                response = await page.goto(url, timeout=timeout * 1000, wait_until="networkidle")
+                body = await page.content()
+            else:
+                response = await context.request.fetch(
+                    url,
+                    method=method.value,
+                    headers=headers,
+                    data=data,
+                    params=params,
+                    timeout=timeout * 1000,
+                )
+                body = await response.text()
+
             elapsed = time.time() - start_time
-            body = await page.content()
             
             resp_headers = await response.all_headers() if response else {}
             status_code = response.status if response else 0
@@ -572,11 +610,11 @@ class PlaywrightEngine(BaseHTTPEngine):
                 body=body,
                 elapsed_time=elapsed,
                 request_url=url,
-                cf_ray=resp_headers.get("cf-ray"),
-                cf_cache_status=resp_headers.get("cf-cache-status")
+                cf_ray=self.response_header(resp_headers, "CF-Ray"),
+                cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status")
             )
             
-            http_response.blocked = status_code in [403, 503, 429]
+            http_response.blocked = self.detect_cloudflare_block(status_code, body)
             http_response.challenge_presented = "challenge" in body.lower()
             
             await page.close()
@@ -654,9 +692,9 @@ class CurlCffiEngine(BaseHTTPEngine):
                 body=response.text,
                 elapsed_time=elapsed,
                 request_url=url,
-                cf_ray=resp_headers.get("cf-ray"),
-                cf_cache_status=resp_headers.get("cf-cache-status"),
-                blocked=response.status_code in [403, 503, 429]
+                cf_ray=self.response_header(resp_headers, "CF-Ray"),
+                cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status"),
+                blocked=self.detect_cloudflare_block(response.status_code, response.text)
             )
             
         except Exception as e:
@@ -682,6 +720,7 @@ class GoHTTPEngine(BaseHTTPEngine):
 package main
 
 import (
+    "bytes"
     "encoding/json"
     "fmt"
     "io"
@@ -717,7 +756,7 @@ func main() {
         Timeout: time.Duration(req.Timeout) * time.Second,
     }
 
-    httpReq, err := http.NewRequest(req.Method, req.URL, nil)
+    httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
     if err != nil {
         json.NewEncoder(os.Stdout).Encode(Response{Error: err.Error()})
         return
@@ -775,6 +814,9 @@ func main() {
         import time
         
         prepared_headers = self.prepare_headers(headers)
+        if params:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}{urllib.parse.urlencode(params, doseq=True)}"
         
         request_data = {
             "url": url,
@@ -787,17 +829,18 @@ func main() {
         start_time = time.time()
         
         try:
-            process = await asyncio.create_subprocess_exec(
-                "go", "run", "-",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            input_data = self.GO_CLIENT_CODE + "\n"
-            stdout, stderr = await process.communicate(
-                input=json.dumps(request_data).encode()
-            )
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".go") as source:
+                source.write(self.GO_CLIENT_CODE)
+                source.flush()
+                process = await asyncio.create_subprocess_exec(
+                    "go", "run", source.name,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate(
+                    input=json.dumps(request_data).encode()
+                )
             
             if process.returncode != 0:
                 raise Exception(f"Go process failed: {stderr.decode()}")
@@ -805,15 +848,21 @@ func main() {
             result = json.loads(stdout.decode())
             elapsed = time.time() - start_time
             
-            return HTTPResponse(
+            response = HTTPResponse(
                 status_code=result.get("status_code", 0),
                 headers=result.get("headers", {}),
                 body=result.get("body", ""),
                 elapsed_time=result.get("elapsed_time", elapsed),
                 request_url=url,
-                cf_ray=result.get("headers", {}).get("Cf-Ray"),
+                cf_ray=self.response_header(result.get("headers", {}), "CF-Ray"),
                 error=result.get("error")
             )
+            response.blocked = self.detect_cloudflare_block(response.status_code, response.body)
+            response.challenge_presented = any(
+                indicator in response.body.lower()
+                for indicator in ("cf-browser-verification", "challenge-platform")
+            )
+            return response
             
         except Exception as e:
             return HTTPResponse(
@@ -842,13 +891,19 @@ class HTTPEngine:
         "go-http": GoHTTPEngine
     }
     
-    def __init__(self, engine_name: str = "aiohttp", use_bypass: bool = False):
+    def __init__(
+        self,
+        engine_name: str = "aiohttp",
+        use_bypass: bool = False,
+        request_options: Optional[Dict[str, Any]] = None,
+    ):
         if engine_name not in self.ENGINES:
             raise ValueError(f"Unknown engine: {engine_name}. Available: {list(self.ENGINES.keys())}")
         
         self.engine_name = engine_name
         self.engine = self.ENGINES[engine_name]()
         self.use_bypass = use_bypass
+        self.request_options = request_options or {}
         self.bypass_techniques = None
     
     def set_bypass_techniques(self, bypass):
@@ -858,7 +913,7 @@ class HTTPEngine:
     
     async def request(self, *args, **kwargs) -> HTTPResponse:
         """Make an HTTP request using the configured engine."""
-        return await self.engine.request(*args, **kwargs)
+        return await self.engine.request(*args, **{**self.request_options, **kwargs})
     
     async def batch_request(
         self,

@@ -43,8 +43,16 @@ class Config:
     custom_headers: dict = field(default_factory=dict)
     
     output_file: Optional[str] = None
+    output_format: Optional[str] = None
+    output_dir: Optional[str] = None
+    baseline_file: Optional[str] = None
+    include_response_body: bool = False
     verbose: bool = False
     debug: bool = False
+
+    min_protection_score: Optional[float] = None
+    max_bypasses: Optional[int] = None
+    max_transport_errors: Optional[int] = None
     
     ssl_verify: bool = True
     follow_redirects: bool = True
@@ -66,6 +74,15 @@ class Config:
         
         if self.ddos_attack_type < 1 or self.ddos_attack_type > 15:
             raise ValueError("DDoS attack type must be between 1 and 15")
+
+        if self.min_protection_score is not None and not 0 <= self.min_protection_score <= 100:
+            raise ValueError("Minimum protection score must be between 0 and 100")
+
+        if self.max_bypasses is not None and self.max_bypasses < 0:
+            raise ValueError("Maximum bypasses cannot be negative")
+
+        if self.max_transport_errors is not None and self.max_transport_errors < 0:
+            raise ValueError("Maximum transport errors cannot be negative")
         
         return True
     

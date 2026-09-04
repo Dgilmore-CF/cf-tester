@@ -25,3 +25,5 @@ asyncio-throttle>=1.0.2
 # Development/Testing
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+pytest-cov>=5.0.0
+jsonschema>=4.23.0

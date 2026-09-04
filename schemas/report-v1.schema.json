@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cf-tester.local/schemas/report-v1.schema.json",
+  "title": "cf-tester report",
+  "type": "object",
+  "required": ["schema_version", "run_id", "metadata", "configuration", "ddos_results", "waf_results", "summary", "quality_gate"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "run_id": {"type": "string", "format": "uuid"},
+    "metadata": {
+      "type": "object",
+      "required": ["start_time", "end_time", "duration_seconds", "tool_version", "python_version"],
+      "properties": {
+        "start_time": {"type": "string"},
+        "end_time": {"type": "string"},
+        "duration_seconds": {"type": "number", "minimum": 0},
+        "git_sha": {"type": ["string", "null"]},
+        "tool_version": {"type": "string"},
+        "python_version": {"type": "string"},
+        "platform": {"type": "string"},
+        "http_engine": {"type": ["string", "null"]}
+      }
+    },
+    "configuration": {"type": "object"},
+    "ddos_results": {"type": "array", "items": {"type": "object"}},
+    "waf_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "method", "outcome", "attempt_type"],
+        "properties": {
+          "case_id": {"type": "string"},
+          "method": {"type": "string"},
+          "outcome": {"enum": ["blocked", "allowed", "challenged", "error", "inconclusive"]},
+          "attempt_type": {"enum": ["baseline", "bypass"]}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["protection_score", "waf_tests", "waf_bypasses", "transport_errors", "latency_ms"]
+    },
+    "quality_gate": {
+      "type": "object",
+      "required": ["status", "reasons"],
+      "properties": {
+        "status": {"enum": ["passed", "failed"]},
+        "reasons": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "baseline_comparison": {"type": ["object", "null"]}
+  }
+}

@@ -105,6 +105,13 @@ class DDoSSimulator:
         return descriptions.get(attack_type, "Unknown attack type")
     
     async def run(self) -> List[DDoSTestResult]:
+        """Run configured tests and always release HTTP resources."""
+        try:
+            return await self._run_tests()
+        finally:
+            await self.http_engine.close()
+
+    async def _run_tests(self) -> List[DDoSTestResult]:
         """Run the configured DDoS tests with wave-based attacks."""
         attack_type = DDoSAttackType(self.config.ddos_attack_type)
         
@@ -157,12 +164,12 @@ class DDoSSimulator:
             console.print(f"[bold]Requests/Second:[/] {combined_result.requests_per_second:.2f}")
             console.print(f"[bold]Protection Triggered:[/] {'[red]YES[/]' if combined_result.cf_protection_triggered else '[yellow]NO[/]'}")
         
-        await self.http_engine.close()
         return self.results
     
     def _combine_wave_results(self, attack_type: DDoSAttackType, target: str, results: List[DDoSTestResult]) -> DDoSTestResult:
         """Combine results from multiple waves into a single result."""
         total_duration = sum(r.duration for r in results)
+        total_requests = sum(r.total_requests for r in results)
         
         status_dist: Dict[int, int] = {}
         for r in results:
@@ -176,15 +183,18 @@ class DDoSSimulator:
         return DDoSTestResult(
             attack_type=attack_type,
             target=target,
-            total_requests=sum(r.total_requests for r in results),
+            total_requests=total_requests,
             successful_requests=sum(r.successful_requests for r in results),
             blocked_requests=sum(r.blocked_requests for r in results),
             challenged_requests=sum(r.challenged_requests for r in results),
             error_requests=sum(r.error_requests for r in results),
-            avg_response_time=sum(r.avg_response_time for r in results) / len(results) if results else 0,
+            avg_response_time=(
+                sum(r.avg_response_time * r.total_requests for r in results) / total_requests
+                if total_requests else 0
+            ),
             min_response_time=min(r.min_response_time for r in results) if results else 0,
             max_response_time=max(r.max_response_time for r in results) if results else 0,
-            requests_per_second=sum(r.total_requests for r in results) / total_duration if total_duration > 0 else 0,
+            requests_per_second=total_requests / total_duration if total_duration > 0 else 0,
             duration=total_duration,
             cf_protection_triggered=any(r.cf_protection_triggered for r in results),
             cf_ray_ids=all_ray_ids[:20],
@@ -935,10 +945,15 @@ class DDoSSimulator:
     ) -> DDoSTestResult:
         """Compile test results from responses."""
         
-        successful = [r for r in responses if r.status_code in range(200, 400) and not r.blocked]
-        blocked = [r for r in responses if r.blocked]
         challenged = [r for r in responses if r.challenge_presented]
         errors = [r for r in responses if r.error or r.status_code == 0]
+        blocked = [r for r in responses if r.blocked and not r.challenge_presented]
+        successful = [
+            r for r in responses
+            if r.status_code in range(200, 400)
+            and not r.blocked
+            and not r.challenge_presented
+        ]
         
         response_times = [r.elapsed_time for r in responses if r.elapsed_time > 0]
         
@@ -948,8 +963,7 @@ class DDoSSimulator:
         
         cf_ray_ids = [r.cf_ray for r in responses if r.cf_ray]
         
-        cf_triggered = len(blocked) > 0 or len(challenged) > 0 or \
-                       status_dist.get(429, 0) > 0 or status_dist.get(503, 0) > 0
+        cf_triggered = len(blocked) > 0 or len(challenged) > 0
         
         return DDoSTestResult(
             attack_type=attack_type,

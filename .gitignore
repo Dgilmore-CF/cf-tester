@@ -43,6 +43,7 @@ reports/
 output/
 *.json
 !package.json
+!schemas/*.schema.json
 
 # Secrets
 .env

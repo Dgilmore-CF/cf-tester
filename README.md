@@ -132,6 +132,13 @@ python cf_waf_tester.py \
 | `--waf-only` | Only run WAF ruleset tests |
 | `--waf-ruleset` | WAF ruleset to test (owasp, managed, both) |
 | `-o, --output` | Output report file path |
+| `--output-dir` | Create a unique run directory under this path |
+| `--format` | Report format: text, JSON, JUnit, or SARIF |
+| `--baseline` | Compare against a previous JSON report |
+| `--min-protection-score` | Fail the quality gate below this score |
+| `--max-bypasses` | Fail when successful bypasses exceed this count |
+| `--max-transport-errors` | Fail when transport errors exceed this count |
+| `--include-response-body` | Include potentially sensitive response bodies |
 | `-v, --verbose` | Enable verbose output |
 | `--accept-responsibility` | Required for CLI mode |
 
@@ -164,6 +171,37 @@ The tool generates:
 - Bypass findings (if any)
 - Security recommendations
 - Optional JSON/text report export
+- Versioned JSON, JUnit, and SARIF reports for CI systems
+- Explicit blocked, allowed, challenged, error, and inconclusive outcomes
+- Quality-gate exit status (`2` when configured thresholds fail)
+- Run IDs, provenance, latency percentiles, and baseline deltas
+
+Reports omit response bodies by default. Use `--include-response-body` only when the
+resulting artifact can be handled as sensitive data. `--output - --format json`
+writes machine-readable output to stdout. `--output-dir reports --format json`
+creates `reports/<run-id>/report.json` atomically.
+
+### Automated Testing
+
+```bash
+# Unit and local integration tests, including branch coverage
+python -m pytest -m "not browser and not live and not destructive"
+
+# Opt-in browser smoke tests
+python -m pytest -m browser --run-browser --no-cov
+
+# One authorized remote health check; never runs in normal CI
+CF_TEST_TARGET=https://example.com python -m pytest -m live --run-live --no-cov
+```
+
+Normal CI only communicates with local test servers. Browser, live-target, and
+high-volume tests require separate explicit switches. The initial branch coverage
+gate is 50% and should be raised as the remaining attack simulators gain focused
+contract tests.
+
+The protocol and volumetric attack names describe HTTP-layer approximations in the
+current implementation. They do not generate raw UDP, ICMP, SYN, or fragmented IP
+traffic and should not be interpreted as protocol-level validation.
 
 ### Sample Output
 

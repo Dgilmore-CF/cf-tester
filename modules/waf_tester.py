@@ -5,6 +5,7 @@ import random
 import string
 import base64
 import urllib.parse
+import hashlib
 from enum import Enum, auto
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
@@ -73,6 +74,12 @@ class WAFTestCase:
     cwe_id: Optional[str] = None
     owasp_category: Optional[str] = None
     cve_id: Optional[str] = None
+
+    @property
+    def case_id(self) -> str:
+        """Return a stable identifier for this test definition."""
+        value = "\0".join((self.name, self.category, self.payload, self.method.value, self.injection_point))
+        return f"waf-{hashlib.sha256(value.encode()).hexdigest()[:12]}"
     
     def get_cwe_url(self) -> Optional[str]:
         """Get the CWE documentation URL."""
@@ -94,6 +101,16 @@ class WAFTestCase:
         return None
 
 
+class WAFOutcome(Enum):
+    """Canonical result of executing a WAF test case."""
+
+    BLOCKED = "blocked"
+    ALLOWED = "allowed"
+    CHALLENGED = "challenged"
+    ERROR = "error"
+    INCONCLUSIVE = "inconclusive"
+
+
 @dataclass
 class WAFTestResult:
     """Result of a WAF test."""
@@ -108,6 +125,10 @@ class WAFTestResult:
     bypass_technique: Optional[str] = None
     raw_response: Optional[str] = None
     notes: List[str] = field(default_factory=list)
+    outcome: WAFOutcome = WAFOutcome.INCONCLUSIVE
+    error: Optional[str] = None
+    attempt_type: str = "baseline"
+    parent_case_id: Optional[str] = None
 
 
 class WAFTester:
@@ -187,7 +208,7 @@ class WAFTester:
         ("..%2f..%2f..%2fetc/passwd", "URL encoded traversal"),
         ("..%252f..%252f..%252fetc/passwd", "Double URL encoded"),
         ("/etc/passwd%00", "Null byte injection"),
-        ("....\/....\/....\/etc/passwd", "Backslash traversal"),
+        (r"....\/....\/....\/etc/passwd", "Backslash traversal"),
         ("%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd", "Full URL encoded"),
         ("..%c0%af..%c0%af..%c0%afetc/passwd", "UTF-8 encoded traversal"),
         ("..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd", "Unicode slash traversal"),
@@ -362,105 +383,120 @@ class WAFTester:
     async def run(self) -> List[WAFTestResult]:
         """Run WAF tests based on configuration."""
         test_cases = self._generate_test_cases()
-        
-        for target in self.config.get_target_urls():
-            console.print(f"\n[bold cyan]Target:[/] {target}")
-            console.print(f"[bold cyan]Ruleset:[/] {self.config.waf_ruleset.name}")
-            console.print(f"[bold cyan]Total Test Cases:[/] {len(test_cases)}")
-            console.print(f"[bold cyan]Bypass Testing:[/] {'Enabled' if self.config.use_bypass_techniques else 'Disabled'}")
-            console.print(f"[bold cyan]Verbose Mode:[/] {'Enabled' if self.config.verbose else 'Disabled'}\n")
-            
-            self.blocked_count = 0
-            self.passed_count = 0
-            self.bypass_count = 0
-            
-            if self.config.verbose:
-                for i, test_case in enumerate(test_cases, 1):
-                    console.print(f"\n[bold white]Test {i}/{len(test_cases)}[/]")
-                    result = await self._run_test_case(test_case, target, verbose=True)
-                    self.results.append(result)
-                    
-                    if result.blocked:
-                        self.blocked_count += 1
-                    else:
-                        self.passed_count += 1
-                    
-                    if self.config.use_bypass_techniques and result.blocked:
-                        bypass_results = await self._try_bypass(test_case, target)
-                        self.results.extend(bypass_results)
-                        
-                        for br in bypass_results:
-                            if br.bypass_successful:
-                                self.bypass_count += 1
-                                console.print(f"[bold red]  ⚠ BYPASS SUCCESSFUL using {br.bypass_technique}![/]")
-            else:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[bold blue]{task.description}"),
-                    BarColumn(bar_width=40),
-                    TaskProgressColumn(),
-                    TextColumn("|"),
-                    TextColumn("[green]Blocked:{task.fields[blocked]}"),
-                    TextColumn("[yellow]Passed:{task.fields[passed]}"),
-                    TextColumn("[red]Bypassed:{task.fields[bypassed]}"),
-                    TextColumn("|"),
-                    TimeElapsedColumn(),
-                    console=console,
-                    refresh_per_second=10
-                ) as progress:
-                    task = progress.add_task(
-                        "WAF Testing",
-                        total=len(test_cases),
-                        blocked=0,
-                        passed=0,
-                        bypassed=0
-                    )
-                    
-                    for test_case in test_cases:
-                        result = await self._run_test_case(test_case, target, verbose=False)
+
+        try:
+            for target in self.config.get_target_urls():
+                console.print(f"\n[bold cyan]Target:[/] {target}")
+                console.print(f"[bold cyan]Ruleset:[/] {self.config.waf_ruleset.name}")
+                console.print(f"[bold cyan]Total Test Cases:[/] {len(test_cases)}")
+                console.print(f"[bold cyan]Bypass Testing:[/] {'Enabled' if self.config.use_bypass_techniques else 'Disabled'}")
+                console.print(f"[bold cyan]Verbose Mode:[/] {'Enabled' if self.config.verbose else 'Disabled'}\n")
+
+                self.blocked_count = 0
+                self.passed_count = 0
+                self.bypass_count = 0
+
+                if self.config.verbose:
+                    for i, test_case in enumerate(test_cases, 1):
+                        console.print(f"\n[bold white]Test {i}/{len(test_cases)}[/]")
+                        result = await self._run_test_case(test_case, target, verbose=True)
                         self.results.append(result)
-                        
+
                         if result.blocked:
                             self.blocked_count += 1
                         else:
                             self.passed_count += 1
-                        
-                        if self.config.use_bypass_techniques and result.blocked:
+
+                        if self.config.use_bypass_techniques and result.blocked and test_case.expected_block:
                             bypass_results = await self._try_bypass(test_case, target)
                             self.results.extend(bypass_results)
-                            
+
                             for br in bypass_results:
                                 if br.bypass_successful:
                                     self.bypass_count += 1
-                        
-                        progress.update(
-                            task,
-                            advance=1,
-                            blocked=self.blocked_count,
-                            passed=self.passed_count,
-                            bypassed=self.bypass_count
+                                    console.print(f"[bold red]  ⚠ BYPASS SUCCESSFUL using {br.bypass_technique}![/]")
+                else:
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[bold blue]{task.description}"),
+                        BarColumn(bar_width=40),
+                        TaskProgressColumn(),
+                        TextColumn("|"),
+                        TextColumn("[green]Blocked:{task.fields[blocked]}"),
+                        TextColumn("[yellow]Passed:{task.fields[passed]}"),
+                        TextColumn("[red]Bypassed:{task.fields[bypassed]}"),
+                        TextColumn("|"),
+                        TimeElapsedColumn(),
+                        console=console,
+                        refresh_per_second=10,
+                    ) as progress:
+                        task = progress.add_task(
+                            "WAF Testing",
+                            total=len(test_cases),
+                            blocked=0,
+                            passed=0,
+                            bypassed=0,
                         )
-            
-            console.print(f"\n[bold]WAF Test Summary for {target}:[/]")
-            console.print(f"  [green]Blocked:[/] {self.blocked_count}/{len(test_cases)}")
-            console.print(f"  [yellow]Passed (not blocked):[/] {self.passed_count}/{len(test_cases)}")
-            if self.config.use_bypass_techniques:
-                console.print(f"  [red]Bypasses Found:[/] {self.bypass_count}")
-        
-        await self.http_engine.close()
+
+                        for test_case in test_cases:
+                            result = await self._run_test_case(test_case, target, verbose=False)
+                            self.results.append(result)
+
+                            if result.blocked:
+                                self.blocked_count += 1
+                            else:
+                                self.passed_count += 1
+
+                            if self.config.use_bypass_techniques and result.blocked and test_case.expected_block:
+                                bypass_results = await self._try_bypass(test_case, target)
+                                self.results.extend(bypass_results)
+
+                                for br in bypass_results:
+                                    if br.bypass_successful:
+                                        self.bypass_count += 1
+
+                            progress.update(
+                                task,
+                                advance=1,
+                                blocked=self.blocked_count,
+                                passed=self.passed_count,
+                                bypassed=self.bypass_count,
+                            )
+
+                console.print(f"\n[bold]WAF Test Summary for {target}:[/]")
+                console.print(f"  [green]Blocked:[/] {self.blocked_count}/{len(test_cases)}")
+                console.print(f"  [yellow]Passed (not blocked):[/] {self.passed_count}/{len(test_cases)}")
+                if self.config.use_bypass_techniques:
+                    console.print(f"  [red]Bypasses Found:[/] {self.bypass_count}")
+        finally:
+            await self.http_engine.close()
         return self.results
     
     def _generate_test_cases(self) -> List[WAFTestCase]:
         """Generate test cases based on selected ruleset."""
         test_cases = []
-        
+
         if self.config.waf_ruleset in [WAFRuleset.OWASP, WAFRuleset.BOTH]:
             test_cases.extend(self._generate_owasp_test_cases())
         
         if self.config.waf_ruleset in [WAFRuleset.CLOUDFLARE_MANAGED, WAFRuleset.BOTH]:
             test_cases.extend(self._generate_managed_test_cases())
-        
-        return test_cases
+
+        test_cases.append(WAFTestCase(
+            name="Benign request control",
+            category="Control",
+            ruleset="Control",
+            payload="cf-tester-benign-control",
+            method=HTTPMethod.GET,
+            injection_point="query_param",
+            expected_block=False,
+            description="Detect false positives by sending a benign value",
+        ))
+
+        unique_cases = {}
+        for test_case in test_cases:
+            unique_cases.setdefault(test_case.case_id, test_case)
+        return list(unique_cases.values())
     
     def _generate_owasp_test_cases(self) -> List[WAFTestCase]:
         """Generate OWASP Core Ruleset test cases."""
@@ -578,6 +614,32 @@ class WAFTester:
                 cwe_id="CWE-917",
                 owasp_category="A06:2021-Vulnerable Components"
             ))
+
+        for payload, desc in self.LDAP_INJECTION_PAYLOADS:
+            test_cases.append(WAFTestCase(
+                name=f"LDAP: {desc}", category="LDAP Injection", ruleset="OWASP",
+                payload=payload, method=HTTPMethod.GET, injection_point="query_param",
+                expected_block=True, description=desc, cwe_id="CWE-90",
+                owasp_category="A03:2021-Injection",
+            ))
+
+        for payload, desc in self.HEADER_INJECTION_PAYLOADS:
+            if "\r" in payload or "\n" in payload:
+                continue
+            test_cases.append(WAFTestCase(
+                name=f"Header: {desc}", category="Header Injection", ruleset="OWASP",
+                payload=payload, method=HTTPMethod.GET, injection_point="header",
+                expected_block=True, description=desc, cwe_id="CWE-113",
+                owasp_category="A03:2021-Injection",
+            ))
+
+        for payload, desc in self.PROTOTYPE_POLLUTION_PAYLOADS:
+            test_cases.append(WAFTestCase(
+                name=f"Prototype: {desc}", category="Prototype Pollution", ruleset="OWASP",
+                payload=payload, method=HTTPMethod.POST, injection_point="body",
+                expected_block=True, description=desc, cwe_id="CWE-1321",
+                owasp_category="A03:2021-Injection",
+            ))
         
         return test_cases
     
@@ -637,7 +699,12 @@ class WAFTester:
             url = f"{target.rstrip('/')}/{test_case.payload}"
         elif test_case.injection_point == "body":
             data = test_case.payload
-            headers["Content-Type"] = "application/xml" if "xml" in test_case.payload.lower() else "application/x-www-form-urlencoded"
+            if test_case.payload.lstrip().startswith(("{", "[")):
+                headers["Content-Type"] = "application/json"
+            elif "xml" in test_case.payload.lower():
+                headers["Content-Type"] = "application/xml"
+            else:
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
         elif test_case.injection_point == "header":
             headers["X-Test"] = test_case.payload
             headers["User-Agent"] = test_case.payload
@@ -656,7 +723,8 @@ class WAFTester:
             timeout=self.config.timeout
         )
         
-        blocked = self._is_blocked(response)
+        outcome = self._classify_response(response)
+        blocked = outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
         
         result = WAFTestResult(
             test_case=test_case,
@@ -667,7 +735,9 @@ class WAFTester:
             response_time=response.elapsed_time,
             cf_ray=response.cf_ray,
             bypass_successful=False,
-            raw_response=response.body[:1500] if response.body else ""
+            raw_response=response.body[:1500] if response.body else "",
+            outcome=outcome,
+            error=response.error,
         )
         
         if verbose:
@@ -677,11 +747,20 @@ class WAFTester:
     
     def _is_blocked(self, response: HTTPResponse) -> bool:
         """Determine if a request was blocked by WAF."""
+        return self._classify_response(response) in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
+
+    def _classify_response(self, response: HTTPResponse) -> WAFOutcome:
+        """Classify a response without conflating transport failures with WAF verdicts."""
+        if response.error or response.status_code == 0:
+            return WAFOutcome.ERROR
+
+        if response.challenge_presented:
+            return WAFOutcome.CHALLENGED
+
         if response.status_code in [403, 406, 429, 503]:
             block_indicators = [
                 "blocked",
                 "access denied", 
-                "forbidden",
                 "attention required",
                 "security check",
                 "please wait",
@@ -691,13 +770,13 @@ class WAFTester:
             if response.body:
                 body_lower = response.body.lower()
                 if any(indicator in body_lower for indicator in block_indicators):
-                    return True
-            return True
-        
-        if response.challenge_presented:
-            return True
-        
-        return False
+                    return WAFOutcome.BLOCKED
+            return WAFOutcome.INCONCLUSIVE
+
+        if 200 <= response.status_code < 400:
+            return WAFOutcome.ALLOWED
+
+        return WAFOutcome.INCONCLUSIVE
     
     async def _try_bypass(self, test_case: WAFTestCase, target: str) -> List[WAFTestResult]:
         """Try various bypass techniques for a blocked payload."""
@@ -722,7 +801,9 @@ class WAFTester:
             
             result = await self._run_test_case(modified_test, target)
             result.bypass_technique = encoding_name
-            result.bypass_successful = not result.blocked
+            result.bypass_successful = result.outcome == WAFOutcome.ALLOWED
+            result.attempt_type = "bypass"
+            result.parent_case_id = test_case.case_id
             
             bypass_results.append(result)
             
@@ -742,7 +823,8 @@ class WAFTester:
                     timeout=self.config.timeout
                 )
                 
-                blocked = self._is_blocked(response)
+                outcome = self._classify_response(response)
+                blocked = outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
                 
                 result = WAFTestResult(
                     test_case=test_case,
@@ -752,8 +834,12 @@ class WAFTester:
                     challenge_presented=response.challenge_presented,
                     response_time=response.elapsed_time,
                     cf_ray=response.cf_ray,
-                    bypass_successful=not blocked,
-                    bypass_technique=f"Content-Type: {content_type}"
+                    bypass_successful=outcome == WAFOutcome.ALLOWED,
+                    bypass_technique=f"Content-Type: {content_type}",
+                    outcome=outcome,
+                    error=response.error,
+                    attempt_type="bypass",
+                    parent_case_id=test_case.case_id,
                 )
                 
                 bypass_results.append(result)
@@ -762,13 +848,15 @@ class WAFTester:
     
     def get_summary(self) -> Dict[str, Any]:
         """Get a summary of test results."""
-        total = len(self.results)
-        blocked = sum(1 for r in self.results if r.blocked)
-        bypassed = sum(1 for r in self.results if r.bypass_successful)
-        challenged = sum(1 for r in self.results if r.challenge_presented)
+        baseline = [r for r in self.results if r.attempt_type == "baseline"]
+        bypass_attempts = [r for r in self.results if r.attempt_type == "bypass"]
+        total = len(baseline)
+        blocked = sum(1 for r in baseline if r.blocked)
+        bypassed = sum(1 for r in bypass_attempts if r.bypass_successful)
+        challenged = sum(1 for r in baseline if r.challenge_presented)
         
         by_category: Dict[str, Dict[str, int]] = {}
-        for result in self.results:
+        for result in baseline:
             cat = result.test_case.category
             if cat not in by_category:
                 by_category[cat] = {"total": 0, "blocked": 0, "bypassed": 0}
@@ -782,6 +870,8 @@ class WAFTester:
             "total_tests": total,
             "blocked": blocked,
             "bypassed": bypassed,
+            "bypass_attempts": len(bypass_attempts),
+            "errors": sum(1 for r in baseline if r.outcome == WAFOutcome.ERROR),
             "challenged": challenged,
             "block_rate": blocked / total * 100 if total > 0 else 0,
             "bypass_rate": bypassed / total * 100 if total > 0 else 0,

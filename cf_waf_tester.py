@@ -13,7 +13,9 @@ Unauthorized use may violate computer crime laws.
 import argparse
 import sys
 import asyncio
+from contextlib import redirect_stdout
 from typing import Optional, List
+from pathlib import Path
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
@@ -193,13 +195,31 @@ def interactive_mode():
     run_tests(config, test_type, output_file=None)
 
 
-def run_tests(config: Config, test_type: str, output_file: str = None):
+def run_tests(config: Config, test_type: str, output_file: str = None, output_stream=None):
     """Execute the configured tests."""
-    reporter = Reporter(output_file=output_file)
+    config.validate()
+    reporter = Reporter(
+        output_file=output_file,
+        config=config,
+        output_format=config.output_format,
+        baseline_file=config.baseline_file,
+        output_stream=output_stream,
+    )
+    if config.output_dir and not output_file:
+        extension = {"text": "txt", "junit": "xml"}.get(config.output_format, config.output_format or "json")
+        reporter.output_file = str(Path(config.output_dir) / reporter.run_id / f"report.{extension}")
     
     console.print("\n[bold green]Starting tests...[/]\n")
     
-    http_engine = HTTPEngine(config.http_engine, config.use_bypass_techniques)
+    http_engine = HTTPEngine(
+        config.http_engine,
+        config.use_bypass_techniques,
+        request_options={
+            "ssl_verify": config.ssl_verify,
+            "follow_redirects": config.follow_redirects,
+            "max_redirects": config.max_redirects,
+        },
+    )
     
     if config.use_bypass_techniques:
         bypass = BypassTechniques()
@@ -217,10 +237,11 @@ def run_tests(config: Config, test_type: str, output_file: str = None):
         waf_results = asyncio.run(waf_tester.run())
         reporter.add_waf_results(waf_results)
     
-    reporter.generate_report()
+    report_data = reporter.generate_report()
+    return 2 if report_data["quality_gate"]["status"] == "failed" else 0
 
 
-def cli_mode(args):
+def cli_mode(args, output_stream=None):
     """Run the tool in CLI mode."""
     display_banner()
     
@@ -248,7 +269,15 @@ def cli_mode(args):
         ddos_waves=waves,
         ddos_wave_delay=args.ddos_wave_delay,
         ddos_ramp_up=not args.no_ramp_up,
-        verbose=args.verbose
+        output_file=args.output,
+        output_format=args.output_format,
+        output_dir=args.output_dir,
+        baseline_file=args.baseline,
+        include_response_body=args.include_response_body,
+        min_protection_score=args.min_protection_score,
+        max_bypasses=args.max_bypasses,
+        max_transport_errors=args.max_transport_errors,
+        verbose=args.verbose,
     )
     
     test_type = "3"
@@ -272,7 +301,7 @@ def cli_mode(args):
         }
         config.waf_ruleset = ruleset_map.get(args.waf_ruleset, WAFRuleset.BOTH)
     
-    run_tests(config, test_type, output_file=args.output)
+    return run_tests(config, test_type, output_file=args.output, output_stream=output_stream)
 
 
 def main():
@@ -323,15 +352,29 @@ Examples:
                         help="Acknowledge that you have authorization to test the targets")
     
     parser.add_argument("-o", "--output", help="Output report file path")
+    parser.add_argument("--output-dir", help="Create a run-ID report directory under this path")
+    parser.add_argument("--format", choices=["text", "json", "junit", "sarif"], dest="output_format",
+                        help="Report format (otherwise inferred from --output)")
+    parser.add_argument("--baseline", help="Previous JSON report to compare against")
+    parser.add_argument("--include-response-body", action="store_true",
+                        help="Include truncated response bodies in reports (may contain sensitive data)")
+    parser.add_argument("--min-protection-score", type=float, help="Fail if protection score is below this value")
+    parser.add_argument("--max-bypasses", type=int, help="Fail if successful bypasses exceed this value")
+    parser.add_argument("--max-transport-errors", type=int, help="Fail if transport errors exceed this value")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     
     args = parser.parse_args()
     
     if args.targets:
-        cli_mode(args)
+        machine_stdout = args.output == "-" and args.output_format in ("json", "junit", "sarif")
+        if machine_stdout:
+            output_stream = sys.stdout
+            with redirect_stdout(sys.stderr):
+                return cli_mode(args, output_stream=output_stream)
+        return cli_mode(args)
     else:
-        interactive_mode()
+        return interactive_mode()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

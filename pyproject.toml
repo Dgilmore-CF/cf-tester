@@ -1,0 +1,20 @@
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --cov=modules --cov=cf_waf_tester --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=50"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "unit: isolated tests with no network access",
+  "integration: tests using local services only",
+  "browser: opt-in browser engine tests",
+  "live: opt-in tests against an authorized remote target",
+  "destructive: opt-in high-volume tests",
+]
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_also = [
+  "if __name__ == .__main__.:",
+  "@abstractmethod",
+]

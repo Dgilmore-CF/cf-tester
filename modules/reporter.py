@@ -2,6 +2,11 @@
 
 import json
 import time
+import os
+import platform
+import sys
+import uuid
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
@@ -14,10 +19,12 @@ from rich.panel import Panel
 from rich import print as rprint
 
 from .ddos_simulator import DDoSTestResult, DDoSAttackType
-from .waf_tester import WAFTestResult
+from .waf_tester import WAFOutcome, WAFTestResult
+from .config import Config
 
 logger = logging.getLogger(__name__)
 console = Console()
+TOOL_VERSION = "1.0.0"
 
 
 @dataclass
@@ -35,11 +42,23 @@ class TestSummary:
 class Reporter:
     """Generate and display test reports."""
     
-    def __init__(self, output_file: Optional[str] = None):
+    def __init__(
+        self,
+        output_file: Optional[str] = None,
+        config: Optional[Config] = None,
+        output_format: Optional[str] = None,
+        baseline_file: Optional[str] = None,
+        output_stream=None,
+    ):
         self.output_file = output_file
+        self.config = config
+        self.output_format = output_format
+        self.baseline_file = baseline_file
+        self.output_stream = output_stream or sys.stdout
         self.ddos_results: List[DDoSTestResult] = []
         self.waf_results: List[WAFTestResult] = []
         self.start_time = datetime.now()
+        self.run_id = str(uuid.uuid4())
     
     def add_ddos_results(self, results: List[DDoSTestResult]):
         """Add DDoS test results."""
@@ -49,7 +68,7 @@ class Reporter:
         """Add WAF test results."""
         self.waf_results.extend(results)
     
-    def generate_report(self):
+    def generate_report(self) -> Dict[str, Any]:
         """Generate and display the full report."""
         end_time = datetime.now()
         duration = (end_time - self.start_time).total_seconds()
@@ -69,8 +88,14 @@ class Reporter:
         
         self._display_summary()
         
+        report_data = self._build_report_data(end_time)
+        if report_data["quality_gate"]["status"] == "failed":
+            console.print("\n[bold red]Quality gate failed:[/]")
+            for reason in report_data["quality_gate"]["reasons"]:
+                console.print(f"  - {reason}")
         if self.output_file:
-            self._save_report()
+            self._save_report(report_data)
+        return report_data
     
     def _display_ddos_results(self):
         """Display DDoS test results."""
@@ -118,7 +143,8 @@ class Reporter:
         console.print(Panel("WAF RULESET TEST RESULTS", style="bold cyan"))
         
         categories: Dict[str, Dict[str, int]] = {}
-        for result in self.waf_results:
+        baseline_results = [r for r in self.waf_results if r.attempt_type == "baseline"]
+        for result in baseline_results:
             cat = result.test_case.category
             if cat not in categories:
                 categories[cat] = {"total": 0, "blocked": 0, "bypassed": 0}
@@ -171,8 +197,8 @@ class Reporter:
             console.print(bypass_table)
             console.print(f"\n[bold red]⚠️  {len(bypasses)} potential WAF bypasses found![/]")
         
-        total_tests = len(self.waf_results)
-        blocked = sum(1 for r in self.waf_results if r.blocked)
+        total_tests = len(baseline_results)
+        blocked = sum(1 for r in baseline_results if r.blocked)
         overall_block_rate = blocked / total_tests * 100 if total_tests > 0 else 0
         
         console.print(f"\n[bold]Overall WAF Block Rate:[/] {overall_block_rate:.1f}%")
@@ -189,19 +215,20 @@ class Reporter:
             targets.add(r.target)
         
         ddos_protected = sum(1 for r in self.ddos_results if r.cf_protection_triggered)
-        waf_blocked = sum(1 for r in self.waf_results if r.blocked and not r.bypass_successful)
+        baseline_results = [r for r in self.waf_results if r.attempt_type == "baseline"]
+        waf_blocked = sum(1 for r in baseline_results if r.blocked)
         waf_bypassed = sum(1 for r in self.waf_results if r.bypass_successful)
         
         console.print(f"[bold]Targets Tested:[/] {len(targets)}")
         console.print(f"[bold]DDoS Tests:[/] {len(self.ddos_results)}")
-        console.print(f"[bold]WAF Tests:[/] {len(self.waf_results)}")
+        console.print(f"[bold]WAF Tests:[/] {len(baseline_results)}")
         
         if self.ddos_results:
             ddos_protection_rate = ddos_protected / len(self.ddos_results) * 100
             console.print(f"[bold]DDoS Protection Rate:[/] {ddos_protection_rate:.1f}%")
         
-        if self.waf_results:
-            waf_effective_rate = waf_blocked / len(self.waf_results) * 100
+        if baseline_results:
+            waf_effective_rate = waf_blocked / len(baseline_results) * 100
             console.print(f"[bold]WAF Effective Block Rate:[/] {waf_effective_rate:.1f}%")
             
             if waf_bypassed > 0:
@@ -231,17 +258,31 @@ class Reporter:
         scores = []
         
         if self.ddos_results:
-            ddos_protected = sum(1 for r in self.ddos_results if r.cf_protection_triggered)
-            ddos_score = ddos_protected / len(self.ddos_results) * 100
-            scores.append(ddos_score)
+            conclusive_requests = sum(r.total_requests - r.error_requests for r in self.ddos_results)
+            mitigated_requests = sum(
+                r.blocked_requests + r.challenged_requests for r in self.ddos_results
+            )
+            if conclusive_requests:
+                scores.append(min(mitigated_requests / conclusive_requests * 100, 100))
         
         if self.waf_results:
-            waf_blocked = sum(1 for r in self.waf_results if r.blocked)
-            waf_bypassed = sum(1 for r in self.waf_results if r.bypass_successful)
-            
-            waf_score = (waf_blocked - waf_bypassed) / len(self.waf_results) * 100
-            waf_score = max(0, waf_score)
-            scores.append(waf_score)
+            baseline_results = [r for r in self.waf_results if r.attempt_type == "baseline"]
+            conclusive = [
+                r for r in baseline_results
+                if r.outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED, WAFOutcome.ALLOWED)
+            ]
+            if conclusive:
+                correct = sum(
+                    1 for r in conclusive
+                    if (
+                        r.test_case.expected_block
+                        and r.outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
+                    ) or (
+                        not r.test_case.expected_block
+                        and r.outcome == WAFOutcome.ALLOWED
+                    )
+                )
+                scores.append(correct / len(conclusive) * 100)
         
         return sum(scores) / len(scores) if scores else 0
     
@@ -284,14 +325,28 @@ class Reporter:
         for rec in recommendations:
             console.print(rec)
     
-    def _save_report(self):
-        """Save report to file."""
+    def _build_report_data(self, end_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Build the canonical, versioned representation used by every format."""
+        end_time = end_time or datetime.now()
+        baseline_results = [r for r in self.waf_results if r.attempt_type == "baseline"]
+        bypass_results = [r for r in self.waf_results if r.attempt_type == "bypass"]
+        transport_errors = sum(1 for r in self.waf_results if r.outcome == WAFOutcome.ERROR)
+        transport_errors += sum(r.error_requests for r in self.ddos_results)
+
         report_data = {
+            "schema_version": "1.0.0",
+            "run_id": self.run_id,
             "metadata": {
                 "start_time": self.start_time.isoformat(),
-                "end_time": datetime.now().isoformat(),
-                "duration_seconds": (datetime.now() - self.start_time).total_seconds()
+                "end_time": end_time.isoformat(),
+                "duration_seconds": (end_time - self.start_time).total_seconds(),
+                "git_sha": os.environ.get("GITHUB_SHA"),
+                "tool_version": TOOL_VERSION,
+                "python_version": platform.python_version(),
+                "platform": platform.platform(),
+                "http_engine": self.config.http_engine if self.config else None,
             },
+            "configuration": self._report_configuration(),
             "ddos_results": [
                 {
                     "attack_type": r.attack_type.name,
@@ -313,44 +368,202 @@ class Reporter:
             "waf_results": [
                 {
                     "test_name": r.test_case.name,
+                    "case_id": r.test_case.case_id,
                     "category": r.test_case.category,
                     "ruleset": r.test_case.ruleset,
                     "description": r.test_case.description,
+                    "expected_block": r.test_case.expected_block,
                     "payload": r.test_case.payload,
                     "injection_point": r.test_case.injection_point,
                     "cwe_id": r.test_case.cwe_id,
                     "owasp_category": r.test_case.owasp_category,
                     "cve_id": getattr(r.test_case, 'cve_id', None),
                     "target": r.target,
+                    "method": r.test_case.method.value,
                     "response_code": r.response_code,
+                    "outcome": r.outcome.value,
                     "blocked": r.blocked,
                     "challenge_presented": r.challenge_presented,
                     "bypass_successful": r.bypass_successful,
                     "bypass_technique": r.bypass_technique,
                     "response_time": r.response_time,
                     "cf_ray": r.cf_ray,
-                    "raw_response": r.raw_response[:500] if r.raw_response else None
+                    "error": r.error,
+                    "attempt_type": r.attempt_type,
+                    "parent_case_id": r.parent_case_id,
+                    "raw_response": (
+                        r.raw_response[:500]
+                        if r.raw_response and self.config and self.config.include_response_body
+                        else None
+                    ),
+                    "notes": r.notes,
                 }
                 for r in self.waf_results
             ],
             "summary": {
                 "protection_score": self._calculate_protection_score(),
                 "ddos_tests": len(self.ddos_results),
-                "waf_tests": len(self.waf_results),
-                "waf_bypasses": sum(1 for r in self.waf_results if r.bypass_successful)
-            }
+                "waf_tests": len(baseline_results),
+                "bypass_attempts": len(bypass_results),
+                "waf_bypasses": sum(1 for r in bypass_results if r.bypass_successful),
+                "transport_errors": transport_errors,
+                "inconclusive": sum(1 for r in baseline_results if r.outcome == WAFOutcome.INCONCLUSIVE),
+                "false_positives": sum(
+                    1 for r in baseline_results if not r.test_case.expected_block and r.blocked
+                ),
+                "latency_ms": self._latency_percentiles(baseline_results),
+            },
         }
-        
+        report_data["quality_gate"] = self._evaluate_quality_gate(report_data)
+        report_data["baseline_comparison"] = self._compare_baseline(report_data)
+        return report_data
+
+    @staticmethod
+    def _latency_percentiles(results: List[WAFTestResult]) -> Dict[str, float]:
+        values = sorted(r.response_time * 1000 for r in results)
+        if not values:
+            return {"p50": 0, "p95": 0, "p99": 0}
+
+        def percentile(fraction: float) -> float:
+            index = round((len(values) - 1) * fraction)
+            return round(values[index], 3)
+
+        return {"p50": percentile(0.50), "p95": percentile(0.95), "p99": percentile(0.99)}
+
+    def _report_configuration(self) -> Dict[str, Any]:
+        if not self.config:
+            return {}
+        return {
+            "targets": self.config.get_target_urls(),
+            "http_engine": self.config.http_engine,
+            "waf_ruleset": self.config.waf_ruleset.name,
+            "bypass_enabled": self.config.use_bypass_techniques,
+            "request_count": self.config.request_count,
+            "concurrency": self.config.concurrency,
+            "ddos_waves": self.config.ddos_waves,
+            "timeout": self.config.timeout,
+            "response_bodies_included": self.config.include_response_body,
+        }
+
+    def _evaluate_quality_gate(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
+        reasons = []
+        summary = report_data["summary"]
+        config = self.config
+        if config and config.min_protection_score is not None:
+            if summary["protection_score"] < config.min_protection_score:
+                reasons.append(
+                    f"Protection score {summary['protection_score']:.1f} is below {config.min_protection_score:.1f}"
+                )
+        if config and config.max_bypasses is not None:
+            if summary["waf_bypasses"] > config.max_bypasses:
+                reasons.append(f"WAF bypasses {summary['waf_bypasses']} exceed {config.max_bypasses}")
+        if config and config.max_transport_errors is not None:
+            if summary["transport_errors"] > config.max_transport_errors:
+                reasons.append(
+                    f"Transport errors {summary['transport_errors']} exceed {config.max_transport_errors}"
+                )
+        return {"status": "failed" if reasons else "passed", "reasons": reasons}
+
+    def _compare_baseline(self, report_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not self.baseline_file:
+            return None
+        try:
+            baseline = json.loads(Path(self.baseline_file).read_text())
+            previous = baseline["summary"]
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return {"status": "unavailable", "error": str(exc)}
+        current = report_data["summary"]
+        return {
+            "status": "compared",
+            "protection_score_delta": current["protection_score"] - previous["protection_score"],
+            "waf_bypasses_delta": current["waf_bypasses"] - previous.get("waf_bypasses", 0),
+            "transport_errors_delta": current["transport_errors"] - previous.get("transport_errors", 0),
+        }
+
+    def _save_report(self, report_data: Dict[str, Any]):
+        """Save a report atomically in the selected format."""
         output_path = Path(self.output_file)
-        
-        if output_path.suffix == ".json":
-            with open(output_path, "w") as f:
-                json.dump(report_data, f, indent=2)
+        report_format = self.output_format or output_path.suffix.lstrip(".").lower() or "text"
+
+        if report_format == "json":
+            content = json.dumps(report_data, indent=2)
+        elif report_format == "junit":
+            content = self._generate_junit_report(report_data)
+        elif report_format == "sarif":
+            content = json.dumps(self._generate_sarif_report(report_data), indent=2)
         else:
-            with open(output_path, "w") as f:
-                f.write(self._generate_text_report(report_data))
-        
+            content = self._generate_text_report(report_data)
+
+        if self.output_file == "-":
+            self.output_stream.write(f"{content}\n")
+            return
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
+        temporary_path.write_text(content)
+        temporary_path.replace(output_path)
         console.print(f"\n[bold green]Report saved to {self.output_file}[/]")
+
+    def _generate_junit_report(self, report_data: Dict[str, Any]) -> str:
+        baseline = [r for r in report_data["waf_results"] if r["attempt_type"] == "baseline"]
+        failures = sum(
+            1 for r in baseline
+            if (r["expected_block"] and r["outcome"] == WAFOutcome.ALLOWED.value)
+            or (
+                not r["expected_block"]
+                and r["outcome"] in (WAFOutcome.BLOCKED.value, WAFOutcome.CHALLENGED.value)
+            )
+        )
+        suite = ET.Element(
+            "testsuite",
+            name="cf-tester",
+            tests=str(len(baseline)),
+            failures=str(failures),
+            errors=str(sum(
+                1 for r in baseline
+                if r["outcome"] in (WAFOutcome.ERROR.value, WAFOutcome.INCONCLUSIVE.value)
+            )),
+        )
+        for result in baseline:
+            case = ET.SubElement(suite, "testcase", name=result["case_id"], classname=result["category"])
+            unexpected = (
+                result["expected_block"] and result["outcome"] == WAFOutcome.ALLOWED.value
+            ) or (
+                not result["expected_block"]
+                and result["outcome"] in (WAFOutcome.BLOCKED.value, WAFOutcome.CHALLENGED.value)
+            )
+            if unexpected:
+                ET.SubElement(case, "failure", message="Observed outcome did not match expectation")
+            elif result["outcome"] in (WAFOutcome.ERROR.value, WAFOutcome.INCONCLUSIVE.value):
+                ET.SubElement(case, "error", message=result["error"] or result["outcome"])
+        return ET.tostring(suite, encoding="unicode", xml_declaration=True)
+
+    def _generate_sarif_report(self, report_data: Dict[str, Any]) -> Dict[str, Any]:
+        findings = []
+        for result in report_data["waf_results"]:
+            if (
+                result["attempt_type"] == "baseline"
+                and result["expected_block"]
+                and result["outcome"] == WAFOutcome.ALLOWED.value
+            ):
+                findings.append({
+                    "ruleId": result["case_id"],
+                    "level": "warning",
+                    "message": {"text": f"{result['test_name']} was not blocked"},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": result["target"]}}}],
+                })
+            elif result["attempt_type"] == "bypass" and result["bypass_successful"]:
+                findings.append({
+                    "ruleId": result["parent_case_id"] or result["case_id"],
+                    "level": "error",
+                    "message": {"text": f"{result['test_name']} bypassed the WAF"},
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": result["target"]}}}],
+                })
+        return {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "cf-tester"}}, "results": findings}],
+        }
     
     def _generate_text_report(self, report_data: Dict) -> str:
         """Generate text format report."""
@@ -398,7 +611,7 @@ class Reporter:
             ])
             
             for i, r in enumerate(report_data['waf_results'], 1):
-                status = "BLOCKED" if r['blocked'] else "NOT BLOCKED"
+                status = r["outcome"].upper()
                 lines.extend([
                     f"Test {i}/{len(report_data['waf_results'])}",
                     "",
@@ -437,7 +650,7 @@ class Reporter:
                 lines.extend([
                     "",
                     "HTTP Request:",
-                    f"  Method: GET",
+                    f"  Method: {r['method']}",
                     f"  URL: {r['target']}",
                     f"  Payload: {r['payload'][:100]}{'...' if len(r['payload']) > 100 else ''}",
                     f"  Injection Point: {r.get('injection_point', 'N/A')}",
@@ -453,7 +666,7 @@ class Reporter:
                 if r.get('raw_response'):
                     lines.append(r['raw_response'])
                 else:
-                    lines.append("(empty response)")
+                    lines.append("(response body omitted)")
                 
                 lines.extend([
                     "",
