@@ -1,0 +1,19 @@
+tests/unit/test_waf_tester.py
+  s_4213f014f6f890::t_8d03f19be0e066 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "90227694dd544c2243ad15e0623e3497c9d2d73a",
+  "prompts": {},
+  "sessions": {
+    "s_4213f014f6f890": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9371041bffePgKpwcgCfcEyM1",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "Dgilmore-CF <dgilmore@cloudflare.com>"
+    }
+  }
+}
