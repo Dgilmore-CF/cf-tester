@@ -186,8 +186,9 @@ python cf_waf_tester.py \
 | `--accept-responsibility` | Required for CLI mode |
 
 For the opt-in GCP control-plane integration, see
-[GCP Integration](docs/GCP_INTEGRATION.md). Source wiring is implemented;
-no infrastructure has been deployed by this work.
+[GCP Integration](docs/GCP_INTEGRATION.md). The isolated executor and controller
+integration were deployed and verified idle on 2026-10-02; no live WAF probes
+were sent during rollout.
 
 ### DDoS Attack Types
 
@@ -226,8 +227,9 @@ retried. Reports exclude raw bodies, cookies, and redirect Location values.
 
 See [Remote Service](docs/remote-service.md) for signing, storage, API, and offline
 test contracts, and [GCP Integration](docs/GCP_INTEGRATION.md) for rollout boundaries.
-Image publication, secret provisioning, infrastructure deployment, and live
-validation remain separate work.
+The 2026-10-02 lab rollout verified image startup and signed idle status, not
+target protection. Future publication, deployment, and authorized target tests
+remain separate operations.
 
 ## Output
 

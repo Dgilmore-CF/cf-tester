@@ -1,6 +1,6 @@
 # GCP Control-Plane Integration
 
-## Source Status
+## Integration Status
 
 The integration is implemented across this repository and the related
 `gcp-lab-consolidation` checkout at
@@ -9,9 +9,11 @@ sufficient for workspace access; no symlink or global filesystem-permission chan
 is needed. Treat tfvars, Terraform state, credentials, private inventories, and
 logs as sensitive.
 
-This is source integration with offline verification, not a deployment. No image
-has been published, secret provisioned, infrastructure applied, or live target
-probed as part of this integration.
+The isolated executor image was published and the opt-in GCP integration deployed
+on 2026-10-02. Signed idle status and empty history were verified through the
+updated controller. No live WAF probes were sent and no WAF runs were created.
+The related repository's `docs/runbooks/waf-executor.md` records the rollout;
+readiness is not evidence of target protection or managed-rule coverage.
 
 ## Architecture
 
