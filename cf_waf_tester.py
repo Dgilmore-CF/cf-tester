@@ -277,6 +277,8 @@ def cli_mode(args, output_stream=None):
         min_protection_score=args.min_protection_score,
         max_bypasses=args.max_bypasses,
         max_transport_errors=args.max_transport_errors,
+        follow_redirects=args.follow_redirects,
+        max_redirects=args.max_redirects,
         verbose=args.verbose,
     )
     
@@ -336,20 +338,25 @@ Examples:
     parser.add_argument("-b", "--bypass", action="store_true", help="Enable Cloudflare bypass techniques")
     parser.add_argument("-r", "--requests", type=int, default=5000, help="Number of requests per wave (default: 5000)")
     parser.add_argument("-c", "--concurrency", type=int, default=100, help="Number of concurrent connections (default: 100)")
+    parser.add_argument("--follow-redirects", action=argparse.BooleanOptionalAction, default=True,
+                        help="Automatically follow redirects, including across hosts (default: enabled)")
+    parser.add_argument("--max-redirects", type=int, default=5,
+                        help="Maximum redirect hops for non-browser engines (default: 5)")
     
-    parser.add_argument("--ddos-only", action="store_true", help="Only run DDoS protection tests")
+    test_mode = parser.add_mutually_exclusive_group()
+    test_mode.add_argument("--ddos-only", action="store_true", help="Only run DDoS protection tests")
     parser.add_argument("--ddos-type", type=int, default=10, help="DDoS attack type (1-15)")
     parser.add_argument("--ddos-waves", type=int, default=3, help="Number of attack waves (default: 3)")
     parser.add_argument("--ddos-wave-delay", type=float, default=2.0, help="Delay between waves in seconds (default: 2.0)")
     parser.add_argument("--no-ramp-up", action="store_true", help="Disable concurrency ramp-up between waves")
     parser.add_argument("--aggressive", action="store_true", help="Use aggressive settings (10k requests, 200 concurrency, 5 waves)")
     
-    parser.add_argument("--waf-only", action="store_true", help="Only run WAF ruleset tests")
+    test_mode.add_argument("--waf-only", action="store_true", help="Only run WAF ruleset tests")
     parser.add_argument("--waf-ruleset", choices=["owasp", "managed", "both"], default="both",
                         help="WAF ruleset to test against")
     
     parser.add_argument("--accept-responsibility", action="store_true",
-                        help="Acknowledge that you have authorization to test the targets")
+                        help="Acknowledge authorization to test the targets and any followed redirect destinations")
     
     parser.add_argument("-o", "--output", help="Output report file path")
     parser.add_argument("--output-dir", help="Create a run-ID report directory under this path")

@@ -1,0 +1,554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cf-tester.local/schemas/lab-report-v2.schema.json",
+  "title": "WAF Lab Report v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "run_id", "plan", "inventory", "attempts", "status", "warnings", "summary", "rule_coverage", "limitations"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "kind": {"const": "waf-lab"},
+    "run_id": {"type": "string", "minLength": 1},
+    "plan": {"$ref": "#/$defs/plan"},
+    "inventory": {"$ref": "#/$defs/inventory"},
+    "attempts": {"type": "array", "items": {"$ref": "#/$defs/attempt"}},
+    "status": {"type": "string", "minLength": 1},
+    "warnings": {"$ref": "#/$defs/strings"},
+    "summary": {"$ref": "#/$defs/summary"},
+    "rule_coverage": {"$ref": "#/$defs/coverage"},
+    "limitations": {"$ref": "#/$defs/strings", "minItems": 1},
+    "telemetry": {"$ref": "#/$defs/telemetry"}
+  },
+  "$defs": {
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "nullableString": {"type": ["string", "null"]},
+    "version": {"type": ["string", "integer", "null"]},
+    "count": {"type": "integer", "minimum": 0},
+    "utc": {"type": "string", "format": "date-time", "pattern": "(?:Z|\\+00:00)$"},
+    "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+    "redirectUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?::443)?(?:/[A-Za-z0-9/_.~-]*)?$"
+    },
+    "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+    "body": {"type": ["string", "object", "array", "null"]},
+    "request": {
+      "type": "object",
+      "required": ["method", "url", "headers", "body"],
+      "properties": {
+        "method": {"type": "string", "minLength": 1},
+        "url": {"$ref": "#/$defs/url"},
+        "headers": {"$ref": "#/$defs/headers"},
+        "body": {"$ref": "#/$defs/body"}
+      }
+    },
+    "case": {
+      "allOf": [{"$ref": "#/$defs/request"}],
+      "type": "object",
+      "required": ["case_id", "category", "is_control", "variant", "target"],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "is_control": {"type": "boolean"},
+        "variant": {"type": "string"},
+        "target": {"$ref": "#/$defs/url"}
+      }
+    },
+    "redirectCase": {
+      "allOf": [{"$ref": "#/$defs/case"}],
+      "type": "object",
+      "required": ["source_case_id"],
+      "properties": {
+        "source_case_id": {"type": "string", "minLength": 1},
+        "conditional": {"type": "boolean", "const": true}
+      },
+      "unevaluatedProperties": false
+    },
+    "redirectPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "max_hops", "destinations"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "max_hops": {"type": "integer", "minimum": 0, "maximum": 3},
+        "destinations": {
+          "type": "array", "maxItems": 10, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/redirectUrl"}
+        }
+      }
+    },
+    "tlsMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trust_source": {"enum": ["python_default", "CF_LAB_CA_BUNDLE"]},
+        "environment_overrides": {
+          "type": "array", "uniqueItems": true,
+          "items": {"enum": ["CF_LAB_CA_BUNDLE", "SSL_CERT_FILE", "SSL_CERT_DIR"]}
+        },
+        "runtime_versions": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "python": {"type": "string"},
+            "openssl": {"type": "string"},
+            "aiohttp": {"type": "string"}
+          }
+        },
+        "required_aiohttp_version": {"type": "string"},
+        "ca_counts": {
+          "type": ["object", "null"], "additionalProperties": false,
+          "properties": {
+            "x509": {"$ref": "#/$defs/count"},
+            "crl": {"$ref": "#/$defs/count"},
+            "x509_ca": {"$ref": "#/$defs/count"}
+          }
+        },
+        "ca_counts_scope": {"const": "loaded_certificates_only"},
+        "ca_fingerprint": {
+          "anyOf": [
+            {"$ref": "#/$defs/contextId", "minLength": 64, "maxLength": 64},
+            {"type": "null"}
+          ]
+        },
+        "ca_fingerprint_scope": {"const": "all_trust_der_certificates"},
+        "trust_snapshot_frozen": {"type": "boolean"},
+        "verify_mode": {"const": "CERT_REQUIRED"},
+        "check_hostname": {"type": "boolean", "const": true},
+        "verify_flags": {"$ref": "#/$defs/count"},
+        "minimum_version": {"type": "string"},
+        "maximum_version": {"type": "string"},
+        "configuration_error": {
+          "enum": ["unsupported_aiohttp_version", "keylog_not_supported", "empty_bundle_setting", "bundle_unreadable", "bundle_malformed", "bundle_has_no_ca", "default_context_failed", "trust_source_unreadable", "trust_source_unsupported", "trust_source_malformed", "trust_has_no_ca"]
+        }
+      }
+    },
+    "certificateVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verify_code", "verify_message"],
+      "properties": {
+        "verify_code": {"type": ["integer", "null"]},
+        "verify_message": {
+          "enum": ["unable to get issuer certificate", "certificate is not yet valid", "certificate has expired", "self-signed certificate", "self-signed certificate in certificate chain", "unable to get local issuer certificate", "unable to verify the first certificate", "certificate revoked", "invalid CA certificate", "unsuitable certificate purpose", "hostname mismatch", "IP address mismatch", "missing authority key identifier", "missing subject key identifier", "basic constraints of CA certificate not marked critical", "certificate verification failed"]
+        }
+      }
+    },
+    "connectionDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested_hostname", "selected_pinned_ip", "server_hostname", "host_header", "pin_policy", "proxy_used", "trust_env", "force_close", "automatic_http_retry", "allow_redirects", "tls"],
+      "properties": {
+        "requested_hostname": {"$ref": "#/$defs/nullableString"},
+        "selected_pinned_ip": {"$ref": "#/$defs/nullableString"},
+        "server_hostname": {"$ref": "#/$defs/nullableString"},
+        "host_header": {"$ref": "#/$defs/nullableString"},
+        "pin_policy": {"enum": ["first_approved_no_fallback"]},
+        "proxy_used": {"type": "boolean", "const": false},
+        "trust_env": {"type": "boolean", "const": false},
+        "force_close": {"type": "boolean", "const": true},
+        "automatic_http_retry": {"type": "boolean", "const": false},
+        "allow_redirects": {"type": "boolean", "const": false},
+        "tls": {"$ref": "#/$defs/tlsMetadata"},
+        "certificate_verification": {"$ref": "#/$defs/certificateVerification"}
+      }
+    },
+    "redirect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reason", "destination", "location_digest"],
+      "properties": {
+        "status": {"enum": ["followed", "blocked", "disabled"]},
+        "reason": {"type": "string", "minLength": 1},
+        "destination": {"anyOf": [{"$ref": "#/$defs/redirectUrl"}, {"type": "null"}]},
+        "location_digest": {"anyOf": [{"$ref": "#/$defs/contextId"}, {"type": "null"}]}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "required": ["plan_id", "created_at", "targets", "profiles", "cases", "budgets", "catalogue_version"],
+      "properties": {
+        "plan_id": {"type": "string", "minLength": 1},
+        "created_at": {"$ref": "#/$defs/utc"},
+        "targets": {"type": "array", "items": {"$ref": "#/$defs/url"}, "uniqueItems": true},
+        "profiles": {"$ref": "#/$defs/strings", "uniqueItems": true},
+        "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}},
+        "redirect_policy": {"$ref": "#/$defs/redirectPolicy"},
+        "redirect_requests": {"type": "array", "items": {"$ref": "#/$defs/redirectCase"}},
+        "maximum_sends": {"type": "integer", "minimum": 1, "maximum": 500},
+        "tls_policy": {"$ref": "#/$defs/tlsMetadata"},
+        "budgets": {
+          "type": "object",
+          "required": ["max_requests", "rate_per_second", "max_runtime_seconds", "timeout_seconds"],
+          "properties": {
+            "max_requests": {"$ref": "#/$defs/count"},
+            "rate_per_second": {"type": "number", "exclusiveMinimum": 0},
+            "max_runtime_seconds": {"type": "number", "minimum": 0},
+            "timeout_seconds": {"type": "number", "exclusiveMinimum": 0}
+          }
+        },
+        "catalogue_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "ruleset": {
+      "type": "object",
+      "properties": {
+        "id": {"$ref": "#/$defs/nullableString"},
+        "name": {"$ref": "#/$defs/nullableString"},
+        "kind": {"$ref": "#/$defs/nullableString"},
+        "phase": {"$ref": "#/$defs/nullableString"},
+        "version": {"$ref": "#/$defs/version"},
+        "rules": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "required": ["captured_at", "hosts", "warnings"],
+      "properties": {
+        "captured_at": {"$ref": "#/$defs/utc"},
+        "warnings": {"$ref": "#/$defs/strings"},
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["hostname", "zone_id", "zone_name", "account_id", "proxied", "rulesets", "entrypoints", "warnings"],
+            "properties": {
+              "hostname": {"type": "string"},
+              "zone_id": {"$ref": "#/$defs/nullableString"},
+              "zone_name": {"$ref": "#/$defs/nullableString"},
+              "account_id": {"$ref": "#/$defs/nullableString"},
+              "proxied": {"type": ["boolean", "null"]},
+              "rulesets": {"type": "array", "items": {"$ref": "#/$defs/ruleset"}},
+              "entrypoints": {
+                "type": "object",
+                "propertyNames": {"pattern": "^(zone|account):.+$"},
+                "additionalProperties": {"anyOf": [{"$ref": "#/$defs/ruleset"}, {"type": "null"}]}
+              },
+              "warnings": {"$ref": "#/$defs/strings"}
+            }
+          }
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["ray_id", "rule_id", "source", "action", "datetime", "hostname", "metadata"],
+      "properties": {
+        "ray_id": {"$ref": "#/$defs/nullableString"},
+        "rule_id": {"$ref": "#/$defs/nullableString"},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "action": {"$ref": "#/$defs/nullableString"},
+        "datetime": {"anyOf": [{"$ref": "#/$defs/utc"}, {"type": "null"}]},
+        "hostname": {"$ref": "#/$defs/nullableString"},
+        "metadata": {"type": "object"}
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captured_at", "batches", "sampled", "complete"],
+      "properties": {
+        "captured_at": {"$ref": "#/$defs/utc"},
+        "batches": {"type": "array", "items": {"$ref": "#/$defs/telemetryBatch"}},
+        "sampled": {"type": "boolean", "const": true},
+        "complete": {"type": "boolean", "const": false}
+      }
+    },
+    "telemetryBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zone_id", "status", "events", "warnings", "sampled", "complete"],
+      "properties": {
+        "zone_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["available", "partial", "unavailable"]},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+        "warnings": {"$ref": "#/$defs/strings"},
+        "sampled": {"type": "boolean", "const": true},
+        "complete": {"type": "boolean", "const": false},
+        "queried_ray_ids": {"$ref": "#/$defs/strings"},
+        "unqueried_ray_ids": {"$ref": "#/$defs/strings"},
+        "ray_statuses": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-f0-9]{16}$"},
+          "additionalProperties": {"enum": ["available", "partial", "unavailable"]}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["status", "events", "matched_rules", "facts", "observations", "warnings"],
+      "properties": {
+        "status": {"type": "string"},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+        "matched_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "anyOf": [{"required": ["id"]}, {"required": ["rule_id"]}],
+            "properties": {
+              "id": {"type": "string"},
+              "rule_id": {"type": "string"},
+              "ruleset_id": {"$ref": "#/$defs/nullableString"},
+              "ruleset_version": {"$ref": "#/$defs/version"},
+              "phase": {"$ref": "#/$defs/nullableString"}
+            }
+          }
+        },
+        "facts": {"type": ["array", "object"]},
+        "observations": {"type": ["array", "object"]},
+        "warnings": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "required": ["case_id", "category", "is_control", "variant", "target", "started_at", "finished_at", "request", "status_code", "response_headers", "cf_ray", "observation", "error", "evidence"],
+      "properties": {
+        "case_id": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "is_control": {"type": "boolean"},
+        "variant": {"type": "string"},
+        "target": {"$ref": "#/$defs/url"},
+        "started_at": {"$ref": "#/$defs/utc"},
+        "finished_at": {"$ref": "#/$defs/utc"},
+        "request": {"$ref": "#/$defs/request"},
+        "status_code": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+        "response_headers": {"$ref": "#/$defs/headers"},
+        "cf_ray": {"$ref": "#/$defs/nullableString"},
+        "observation": {"enum": ["allowed", "cloudflare_block_response", "challenged", "inconclusive", "error"]},
+        "error": {"$ref": "#/$defs/nullableString"},
+        "warnings": {"$ref": "#/$defs/strings"},
+        "connection_diagnostics": {"$ref": "#/$defs/connectionDiagnostics"},
+        "redirect": {"$ref": "#/$defs/redirect"},
+        "source_case_id": {"type": "string", "minLength": 1},
+        "redirect_hop": {"$ref": "#/$defs/count"},
+        "evidence": {"$ref": "#/$defs/evidence"}
+      }
+    },
+    "outcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "cloudflare_block_response", "challenged", "inconclusive", "error"],
+      "properties": {
+        "allowed": {"$ref": "#/$defs/count"},
+        "cloudflare_block_response": {"$ref": "#/$defs/count"},
+        "challenged": {"$ref": "#/$defs/count"},
+        "inconclusive": {"$ref": "#/$defs/count"},
+        "error": {"$ref": "#/$defs/count"}
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": {"type": "object", "additionalProperties": {"$ref": "#/$defs/count"}}
+    },
+    "reference": {
+      "type": "object",
+      "required": ["attempt_index", "case_id", "target", "rule_id", "source", "action", "ray_id", "datetime"],
+      "properties": {
+        "attempt_index": {"$ref": "#/$defs/count"},
+        "case_id": {"type": "string"},
+        "target": {"$ref": "#/$defs/url"},
+        "rule_id": {"$ref": "#/$defs/nullableString"},
+        "source": {"$ref": "#/$defs/nullableString"},
+        "action": {"$ref": "#/$defs/nullableString"},
+        "ray_id": {"$ref": "#/$defs/nullableString"},
+        "datetime": {"anyOf": [{"$ref": "#/$defs/utc"}, {"type": "null"}]}
+      }
+    },
+    "contribution": {
+      "allOf": [{"$ref": "#/$defs/reference"}],
+      "type": "object",
+      "required": ["primary_rule_id", "ruleset_id", "score", "inventory_resolved", "provenance"],
+      "properties": {
+        "primary_rule_id": {"type": "string"},
+        "ruleset_id": {"type": "string"},
+        "score": {"type": ["number", "string"], "minimum": 0, "pattern": "^[0-9]+(?:\\.[0-9]+)?$"},
+        "inventory_resolved": {"type": "boolean"},
+        "provenance": {
+          "type": "object",
+          "required": ["source"],
+          "properties": {"source": {"type": "string", "pattern": "\\S"}}
+        }
+      }
+    },
+    "effective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "action", "action_parameters", "score_threshold", "sensitivity_level"],
+      "properties": {
+        "enabled": {"type": ["boolean", "null"]},
+        "action": {"$ref": "#/$defs/nullableString"},
+        "action_parameters": {"type": ["object", "null"]},
+        "score_threshold": {"type": ["number", "null"], "minimum": 0},
+        "sensitivity_level": {"type": ["string", "null"]}
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_id", "effective"],
+      "properties": {
+        "context_id": {"$ref": "#/$defs/contextId"},
+        "effective": {"anyOf": [{"$ref": "#/$defs/effective"}, {"type": "null"}]}
+      }
+    },
+    "contextId": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "deploymentContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "phase", "path", "active"],
+      "properties": {
+        "scope": {"enum": ["zone", "account"]},
+        "phase": {"type": "string"},
+        "active": {"type": ["boolean", "null"]},
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ruleset_id", "ruleset_version", "rule_id", "expression", "enabled", "action_parameters"],
+            "properties": {
+              "ruleset_id": {"$ref": "#/$defs/nullableString"},
+              "ruleset_version": {"$ref": "#/$defs/version"},
+              "rule_id": {"$ref": "#/$defs/nullableString"},
+              "expression": {"$ref": "#/$defs/nullableString"},
+              "enabled": {"type": ["boolean", "null"]},
+              "action_parameters": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+    "ledgerEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "zone_id", "account_id", "ruleset_id", "ruleset_name", "ruleset_kind", "ruleset_version", "phase", "rule_id", "rule_version", "position", "source", "configured_enabled", "configured_action", "expression", "rule_ref", "deployment_state", "deployments", "effective", "observations", "scoring_contributions", "coverage_status", "notes"],
+      "properties": {
+        "hostname": {"type": "string"},
+        "zone_id": {"$ref": "#/$defs/nullableString"},
+        "account_id": {"$ref": "#/$defs/nullableString"},
+        "ruleset_id": {"$ref": "#/$defs/nullableString"},
+        "ruleset_name": {"$ref": "#/$defs/nullableString"},
+        "ruleset_kind": {"$ref": "#/$defs/nullableString"},
+        "ruleset_version": {"$ref": "#/$defs/version"},
+        "phase": {"$ref": "#/$defs/nullableString"},
+        "rule_id": {"$ref": "#/$defs/nullableString"},
+        "rule_version": {"$ref": "#/$defs/version"},
+        "position": {"$ref": "#/$defs/count"},
+        "source": {"enum": ["managed_waf", "custom_waf", "deployment", "unknown"]},
+        "configured_enabled": {"type": ["boolean", "null"]},
+        "configured_action": {"$ref": "#/$defs/nullableString"},
+        "expression": {"$ref": "#/$defs/nullableString"},
+        "rule_ref": {"type": "string", "pattern": "^#/inventory/hosts/[0-9]+/(?:rulesets/[0-9]+|entrypoints/[^/]+)/rules/[0-9]+$"},
+        "deployment_state": {"enum": ["deployed", "disabled", "undeployed", "unknown", "out_of_scope"]},
+        "deployments": {"type": "array", "items": {"$ref": "#/$defs/deployment"}},
+        "effective": {"anyOf": [{"$ref": "#/$defs/effective"}, {"type": "null"}]},
+        "observations": {"type": "array", "items": {"$ref": "#/$defs/reference"}},
+        "scoring_contributions": {"type": "array", "items": {"$ref": "#/$defs/contribution"}},
+        "coverage_status": {"enum": ["observed", "disabled", "undeployed/out_of_scope", "untested", "insufficient_evidence"]},
+        "notes": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["denominator", "status_counts", "ledger", "unresolved_rules"],
+      "properties": {
+        "deployment_contexts": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/contextId"},
+          "additionalProperties": {"$ref": "#/$defs/deploymentContext"}
+        },
+        "denominator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "count", "includes_disabled", "includes_undeployed", "unresolved_events_included"],
+          "properties": {
+            "basis": {"const": "captured_inventory_rule_instances_per_host"},
+            "count": {"$ref": "#/$defs/count"},
+            "includes_disabled": {"const": true},
+            "includes_undeployed": {"const": true},
+            "unresolved_events_included": {"const": false}
+          }
+        },
+        "status_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["observed", "disabled", "undeployed/out_of_scope", "untested", "insufficient_evidence"],
+          "properties": {
+            "observed": {"$ref": "#/$defs/count"},
+            "disabled": {"$ref": "#/$defs/count"},
+            "undeployed/out_of_scope": {"$ref": "#/$defs/count"},
+            "untested": {"$ref": "#/$defs/count"},
+            "insufficient_evidence": {"$ref": "#/$defs/count"}
+          }
+        },
+        "ledger": {"type": "array", "items": {"$ref": "#/$defs/ledgerEntry"}},
+        "unresolved_rules": {
+          "type": "array",
+          "items": {
+            "allOf": [{"$ref": "#/$defs/reference"}],
+            "type": "object",
+            "required": ["source_classification", "reason"],
+            "properties": {"source_classification": {"const": "unknown"}, "reason": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned_cases", "attempts", "observations", "control_outcomes", "transport_errors", "inconclusive_observations", "evidence_status_counts", "distinct_matched_managed_rule_ids", "distinct_matched_managed_rule_count", "event_actions_by_source", "enforcement_actions_by_source", "family_observations", "owasp", "configuration_fingerprint"],
+      "properties": {
+        "planned_cases": {"$ref": "#/$defs/count"},
+        "attempts": {"$ref": "#/$defs/count"},
+        "observations": {"$ref": "#/$defs/outcomes"},
+        "control_outcomes": {"$ref": "#/$defs/outcomes"},
+        "transport_errors": {"$ref": "#/$defs/count"},
+        "inconclusive_observations": {"$ref": "#/$defs/count"},
+        "evidence_status_counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["matched", "unmatched", "unavailable", "other"],
+          "properties": {
+            "matched": {"$ref": "#/$defs/count"}, "unmatched": {"$ref": "#/$defs/count"},
+            "unavailable": {"$ref": "#/$defs/count"}, "other": {"$ref": "#/$defs/count"}
+          }
+        },
+        "distinct_matched_managed_rule_ids": {"$ref": "#/$defs/strings", "uniqueItems": true},
+        "distinct_matched_managed_rule_count": {"$ref": "#/$defs/count"},
+        "event_actions_by_source": {"$ref": "#/$defs/actions"},
+        "enforcement_actions_by_source": {"$ref": "#/$defs/actions"},
+        "configuration_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "family_observations": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["category", "planned_cases", "attempts", "observations", "control_outcomes", "correlated_attempts"],
+            "properties": {
+              "category": {"type": "string"},
+              "planned_cases": {"$ref": "#/$defs/count"},
+              "attempts": {"$ref": "#/$defs/count"},
+              "observations": {"$ref": "#/$defs/outcomes"},
+              "control_outcomes": {"$ref": "#/$defs/outcomes"},
+              "correlated_attempts": {"$ref": "#/$defs/count"}
+            }
+          }
+        },
+        "owasp": {
+          "type": "object", "additionalProperties": false,
+          "required": ["primary_events", "scoring_contributions"],
+          "properties": {
+            "primary_events": {
+              "type": "array",
+              "items": {
+                "allOf": [{"$ref": "#/$defs/reference"}],
+                "type": "object", "required": ["ruleset_id", "role"],
+                "properties": {"ruleset_id": {"type": "string"}, "role": {"enum": ["final_score", "rule_event"]}}
+              }
+            },
+            "scoring_contributions": {"type": "array", "items": {"$ref": "#/$defs/contribution"}}
+          }
+        }
+      }
+    }
+  }
+}

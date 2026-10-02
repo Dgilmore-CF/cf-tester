@@ -1,7 +1,8 @@
 # Cloudflare WAF/DDoS Tester Dependencies
 
 # Core HTTP Libraries
-aiohttp>=3.9.0
+# The bounded lab transport disables this version's implicit GET replay.
+aiohttp==3.13.3
 httpx[http2]>=0.26.0
 requests>=2.31.0
 Brotli>=1.1.0

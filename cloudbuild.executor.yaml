@@ -1,0 +1,22 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, --file, Dockerfile.executor, --tag, '${_IMAGE}', .]
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - run
+      - --rm
+      - --read-only
+      - --network
+      - none
+      - --env
+      - PYTHONPATH=/app
+      - --tmpfs
+      - /tmp:rw,noexec,nosuid,size=16m
+      - --mount
+      - type=bind,src=/workspace/scripts/check_executor_image.py,dst=/checks/check_executor_image.py,readonly
+      - --entrypoint
+      - python
+      - '${_IMAGE}'
+      - /checks/check_executor_image.py
+images: ['${_IMAGE}']
+timeout: 1200s

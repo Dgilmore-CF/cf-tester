@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-addopts = "--strict-markers --strict-config --cov=modules --cov=cf_waf_tester --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=50"
+addopts = "--strict-markers --strict-config --cov=modules --cov=cf_waf_tester --cov=waf_lab --cov-branch --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=50"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [

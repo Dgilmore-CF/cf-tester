@@ -1,0 +1,16 @@
+{
+  "name": "cf-tester-opencode-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test tests/waf_lab.test.ts"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.28"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.3",
+    "typescript": "7.0.2"
+  }
+}

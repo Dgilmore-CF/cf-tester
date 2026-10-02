@@ -16,12 +16,16 @@ jobs:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm --prefix .opencode install --ignore-scripts --package-lock=false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install -r requirements.txt -r requirements-executor.txt
       - name: Run safe test suite
         run: python -m pytest -m "not browser and not live and not destructive" --junitxml=reports/tests.xml
       - name: Upload test reports
@@ -31,6 +35,17 @@ jobs:
           name: test-reports-python-${{ matrix.python-version }}
           path: reports/
           retention-days: 14
+
+  opencode-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm --prefix .opencode install --ignore-scripts --package-lock=false
+      - run: npm --prefix .opencode run check
+      - run: npm --prefix .opencode test
 
   browser:
     runs-on: ubuntu-latest

@@ -2,6 +2,11 @@
 
 A comprehensive security testing tool for evaluating Cloudflare WAF configurations and DDoS protection mechanisms.
 
+**Project Direction:** This WAF tester is being folded into the larger
+[GCP lab consolidation effort](https://github.com/Dgilmore-CF/gcp-lab-consolidation).
+This repository remains the source for the tester and isolated executor; the
+consolidated lab provides infrastructure, orchestration, and dashboard controls.
+
 ⚠️ **WARNING: This tool is intended for authorized security testing only. Only use against systems you own or have explicit written permission to test. Unauthorized use may violate computer crime laws.**
 
 ## Features
@@ -70,6 +75,14 @@ playwright install chromium
 
 ## Usage
 
+### Restricted WAF Lab
+
+For bounded, plan-first WAF probes with per-run host/base-path scope, digest-bound
+approval, read-only Cloudflare evidence, and a restricted OpenCode agent, see
+[WAF Lab](docs/WAF_LAB.md). This workflow is separate from the CLI below; it
+does not expose DDoS/bypass tools or promise universal rule coverage. Low-impact
+probes are not harmless on vulnerable origins; use only authorized targets.
+
 ### Interactive Mode
 
 ```bash
@@ -108,6 +121,34 @@ python cf_waf_tester.py \
     --accept-responsibility
 ```
 
+#### Automatic Redirects
+
+The regular CLI follows 301/302/303/307/308 redirects automatically by default,
+including cross-host redirects, without destination-by-destination prompts. The
+non-browser engines honor a five-hop limit; redirect loops or a longer chain
+produce a transport error instead of continuing indefinitely. TLS verification
+remains enabled. Only use this mode when your authorization covers the redirect
+destinations as well as the starting URL.
+
+`--follow-redirects` explicitly enables the default; `--no-follow-redirects`
+returns the original response without following it. `--max-redirects N` sets a
+positive hop limit. These controls work with `aiohttp`, `httpx`, `requests`,
+`curl_cffi`, and `go-http`. Browser engines retain their native navigation behavior
+and reject unsupported custom redirect controls.
+
+HTTP adapter responses retain the final URL and redirect count; saved WAF result
+reports do not yet include those fields. A redirect can discard a query
+or change POST to GET; a successful final response does not prove the original
+payload reached that destination or that a managed WAF rule evaluated it.
+
+At the hop boundary, aiohttp can also report a redirect-limit error for a terminal
+3xx response without a `Location` header. It stops conservatively rather than
+issuing an additional request.
+
+This does **not** change the restricted WAF lab: its `waf_lab_*` tools still
+require exact reviewed conditional requests before following any redirect. The
+regular CLI is not an alternative execution backend for those approved plans.
+
 #### Full Testing with Bypass Techniques
 ```bash
 python cf_waf_tester.py \
@@ -127,6 +168,8 @@ python cf_waf_tester.py \
 | `-b, --bypass` | Enable Cloudflare bypass techniques |
 | `-r, --requests` | Number of requests to generate |
 | `-c, --concurrency` | Number of concurrent connections |
+| `--follow-redirects / --no-follow-redirects` | Follow redirects automatically in non-browser engines (default: enabled) |
+| `--max-redirects` | Maximum redirect hops in non-browser engines (default: 5) |
 | `--ddos-only` | Only run DDoS protection tests |
 | `--ddos-type` | DDoS attack type (1-15) |
 | `--waf-only` | Only run WAF ruleset tests |
@@ -141,6 +184,10 @@ python cf_waf_tester.py \
 | `--include-response-body` | Include potentially sensitive response bodies |
 | `-v, --verbose` | Enable verbose output |
 | `--accept-responsibility` | Required for CLI mode |
+
+For the opt-in GCP control-plane integration, see
+[GCP Integration](docs/GCP_INTEGRATION.md). Source wiring is implemented;
+no infrastructure has been deployed by this work.
 
 ### DDoS Attack Types
 
@@ -161,6 +208,26 @@ python cf_waf_tester.py \
 | 13 | Application | RUDY |
 | 14 | Application | Cache Bypass |
 | 15 | Multi-Vector | Combined Attack |
+
+## Remote Executor
+
+`Dockerfile.executor` packages an idle, single-worker `remote-waf` API for a
+dedicated non-WARP host. The related GCP controller adds **Evidence > WAF executor**
+controls for smoke/full-catalogue runs, cancellation, history, and JSON downloads.
+Use authenticated IAP forwarding to the controller, not a public dashboard proxy.
+
+This mode runs only the fixed reduced-impact catalogue. It is separate from the
+classic CLI and guarded `waf_lab` exact-request approval flow. An authorized
+submission permits automatic public HTTPS redirects within shared request, rate,
+runtime, and hop limits; TLS verification remains enabled. Responses are
+observations, not exploit-success findings or managed-rule coverage scores.
+Restarts never replay runs, and uncertain submissions are never automatically
+retried. Reports exclude raw bodies, cookies, and redirect Location values.
+
+See [Remote Service](docs/remote-service.md) for signing, storage, API, and offline
+test contracts, and [GCP Integration](docs/GCP_INTEGRATION.md) for rollout boundaries.
+Image publication, secret provisioning, infrastructure deployment, and live
+validation remain separate work.
 
 ## Output
 

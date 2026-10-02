@@ -62,15 +62,15 @@ class BaseHTTPEngine(ABC):
     
     def prepare_headers(self, custom_headers: Optional[Dict] = None) -> Dict[str, str]:
         """Prepare headers with optional bypass techniques."""
-        headers = self.default_headers.copy()
-        
+        headers = {}
+        sources = [self.default_headers]
         if self.bypass_techniques:
-            headers.update(self.bypass_techniques.get_headers())
-        
-        if custom_headers:
-            headers.update(custom_headers)
-        
-        return headers
+            sources.append(self.bypass_techniques.get_headers())
+        sources.append(custom_headers or {})
+        for source in sources:
+            for name, value in source.items():
+                headers[name.lower()] = (name, value)
+        return dict(headers.values())
 
     @staticmethod
     def response_header(headers: Dict[str, str], name: str) -> Optional[str]:
@@ -83,13 +83,32 @@ class BaseHTTPEngine(ABC):
         """Require Cloudflare evidence instead of treating every error status as a block."""
         if status not in (403, 406, 429, 503):
             return False
-        body_lower = body.lower()
-        return any(indicator in body_lower for indicator in (
-            "cloudflare",
-            "cf-browser-verification",
-            "challenge-platform",
+        body_lower = (body or "").lower()
+        return "cloudflare" in body_lower and any(indicator in body_lower for indicator in (
+            "blocked",
+            "access denied",
+            "forbidden",
             "attention required",
+            "security check",
             "ray id",
+            "error 1020",
+        ))
+
+    @classmethod
+    def detect_cloudflare_challenge(cls, status: int, body: str, headers: Optional[Dict] = None) -> bool:
+        """Use Cloudflare-specific evidence, including challenges returned with 2xx."""
+        if status == 0:
+            return False
+        mitigated = cls.response_header(headers or {}, "cf-mitigated")
+        if mitigated and mitigated.strip().lower() == "challenge":
+            return True
+        body_lower = (body or "").lower()
+        return any(indicator in body_lower for indicator in (
+            "cf-browser-verification",
+            "/cdn-cgi/challenge-platform/",
+            "jschl_vc",
+            "jschl_answer",
+            "cf-chl-bypass",
         ))
     
     @abstractmethod
@@ -122,14 +141,9 @@ class AiohttpEngine(BaseHTTPEngine):
     async def _get_session(self):
         if self.session is None:
             import aiohttp
-            import ssl
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
             connector = aiohttp.TCPConnector(
                 limit=100, 
                 limit_per_host=30,
-                ssl=ssl_context
             )
             self.session = aiohttp.ClientSession(
                 connector=connector,
@@ -165,7 +179,8 @@ class AiohttpEngine(BaseHTTPEngine):
                 timeout=aiohttp.ClientTimeout(total=timeout),
                 ssl=kwargs.get("ssl_verify", True),
                 allow_redirects=kwargs.get("follow_redirects", True),
-                max_redirects=kwargs.get("max_redirects", 10)
+                # aiohttp counts the initial redirect response against its limit.
+                max_redirects=kwargs.get("max_redirects", 5) + 1
             ) as response:
                 try:
                     body = await response.text()
@@ -197,7 +212,7 @@ class AiohttpEngine(BaseHTTPEngine):
                 )
                 
                 http_response.blocked = self._detect_block(response.status, body)
-                http_response.challenge_presented = self._detect_challenge(body, response.status)
+                http_response.challenge_presented = self.detect_cloudflare_challenge(response.status, body, resp_headers)
                 
                 return http_response
                 
@@ -218,18 +233,7 @@ class AiohttpEngine(BaseHTTPEngine):
     
     def _detect_challenge(self, body: str, status: int) -> bool:
         """Detect if a Cloudflare challenge was presented."""
-        if status == 200:
-            return False
-        
-        challenge_indicators = [
-            "cf-browser-verification",
-            "challenge-platform",
-            "jschl_vc",
-            "jschl_answer",
-            "cf-chl-bypass"
-        ]
-        body_lower = body.lower()
-        return any(indicator in body_lower for indicator in challenge_indicators)
+        return self.detect_cloudflare_challenge(status, body)
     
     async def close(self):
         if self.session:
@@ -240,15 +244,17 @@ class AiohttpEngine(BaseHTTPEngine):
 class HttpxEngine(BaseHTTPEngine):
     """httpx-based HTTP engine."""
     
-    def __init__(self):
+    def __init__(self, max_redirects: int = 5):
         super().__init__()
         self.client = None
+        self.max_redirects = max_redirects
     
     async def _get_client(self):
         if self.client is None:
             import httpx
             self.client = httpx.AsyncClient(
                 http2=True,
+                max_redirects=self.max_redirects,
                 limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
             )
         return self.client
@@ -303,7 +309,7 @@ class HttpxEngine(BaseHTTPEngine):
             )
             
             http_response.blocked = self.detect_cloudflare_block(response.status_code, response.text)
-            http_response.challenge_presented = False if response.status_code == 200 else "cf-browser-verification" in response.text.lower()
+            http_response.challenge_presented = self.detect_cloudflare_challenge(response.status_code, response.text, resp_headers)
             
             return http_response
             
@@ -326,14 +332,17 @@ class HttpxEngine(BaseHTTPEngine):
 class RequestsEngine(BaseHTTPEngine):
     """requests-based HTTP engine (sync, wrapped for async)."""
     
-    def __init__(self):
+    def __init__(self, max_redirects: int = 5):
         super().__init__()
         self.session = None
+        self.max_redirects = max_redirects
     
     def _get_session(self):
         if self.session is None:
             import requests
-            self.session = requests.Session()
+            session = requests.Session()
+            session.max_redirects = self.max_redirects
+            self.session = session
         return self.session
     
     async def request(
@@ -348,6 +357,8 @@ class RequestsEngine(BaseHTTPEngine):
     ) -> HTTPResponse:
         import time
         
+        # Initialize before executor threads can observe a partially configured client.
+        self._get_session()
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
@@ -393,7 +404,8 @@ class RequestsEngine(BaseHTTPEngine):
                 redirect_count=redirect_count,
                 cf_ray=self.response_header(resp_headers, "CF-Ray"),
                 cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status"),
-                blocked=self.detect_cloudflare_block(response.status_code, response.text)
+                blocked=self.detect_cloudflare_block(response.status_code, response.text),
+                challenge_presented=self.detect_cloudflare_challenge(response.status_code, response.text, resp_headers),
             )
             
         except Exception as e:
@@ -680,7 +692,10 @@ class CurlCffiEngine(BaseHTTPEngine):
                 headers=prepared_headers,
                 data=data,
                 params=params,
-                timeout=timeout
+                timeout=timeout,
+                verify=kwargs.get("ssl_verify", True),
+                allow_redirects=kwargs.get("follow_redirects", True),
+                max_redirects=kwargs.get("max_redirects", 5),
             )
             elapsed = time.time() - start_time
             
@@ -692,9 +707,13 @@ class CurlCffiEngine(BaseHTTPEngine):
                 body=response.text,
                 elapsed_time=elapsed,
                 request_url=url,
+                final_url=response.url,
+                redirected=response.redirect_count > 0,
+                redirect_count=response.redirect_count,
                 cf_ray=self.response_header(resp_headers, "CF-Ray"),
                 cf_cache_status=self.response_header(resp_headers, "CF-Cache-Status"),
-                blocked=self.detect_cloudflare_block(response.status_code, response.text)
+                blocked=self.detect_cloudflare_block(response.status_code, response.text),
+                challenge_presented=self.detect_cloudflare_challenge(response.status_code, response.text, resp_headers),
             )
             
         except Exception as e:
@@ -735,6 +754,8 @@ type Request struct {
     Headers map[string]string `json:"headers"`
     Body    string            `json:"body"`
     Timeout int               `json:"timeout"`
+    FollowRedirects bool      `json:"follow_redirects"`
+    MaxRedirects int          `json:"max_redirects"`
 }
 
 type Response struct {
@@ -743,6 +764,8 @@ type Response struct {
     Body        string            `json:"body"`
     ElapsedTime float64           `json:"elapsed_time"`
     Error       string            `json:"error,omitempty"`
+    FinalURL    string            `json:"final_url"`
+    RedirectCount int             `json:"redirect_count"`
 }
 
 func main() {
@@ -752,8 +775,19 @@ func main() {
         return
     }
 
+    redirectCount := 0
     client := &http.Client{
         Timeout: time.Duration(req.Timeout) * time.Second,
+        CheckRedirect: func(next *http.Request, via []*http.Request) error {
+            if !req.FollowRedirects {
+                return http.ErrUseLastResponse
+            }
+            if len(via) > req.MaxRedirects {
+                return fmt.Errorf("maximum redirects exceeded")
+            }
+            redirectCount++
+            return nil
+        },
     }
 
     httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
@@ -774,6 +808,7 @@ func main() {
         json.NewEncoder(os.Stdout).Encode(Response{
             ElapsedTime: elapsed,
             Error:       err.Error(),
+            RedirectCount: redirectCount,
         })
         return
     }
@@ -793,6 +828,8 @@ func main() {
         Headers:     headers,
         Body:        string(body),
         ElapsedTime: elapsed,
+        FinalURL:    resp.Request.URL.String(),
+        RedirectCount: redirectCount,
     })
 }
 '''
@@ -823,7 +860,9 @@ func main() {
             "method": method.value,
             "headers": prepared_headers,
             "body": data if isinstance(data, str) else "",
-            "timeout": timeout
+            "timeout": timeout,
+            "follow_redirects": kwargs.get("follow_redirects", True),
+            "max_redirects": kwargs.get("max_redirects", 5),
         }
         
         start_time = time.time()
@@ -854,14 +893,14 @@ func main() {
                 body=result.get("body", ""),
                 elapsed_time=result.get("elapsed_time", elapsed),
                 request_url=url,
+                final_url=result.get("final_url"),
+                redirected=result.get("redirect_count", 0) > 0,
+                redirect_count=result.get("redirect_count", 0),
                 cf_ray=self.response_header(result.get("headers", {}), "CF-Ray"),
                 error=result.get("error")
             )
             response.blocked = self.detect_cloudflare_block(response.status_code, response.body)
-            response.challenge_presented = any(
-                indicator in response.body.lower()
-                for indicator in ("cf-browser-verification", "challenge-platform")
-            )
+            response.challenge_presented = self.detect_cloudflare_challenge(response.status_code, response.body, response.headers)
             return response
             
         except Exception as e:
@@ -901,9 +940,11 @@ class HTTPEngine:
             raise ValueError(f"Unknown engine: {engine_name}. Available: {list(self.ENGINES.keys())}")
         
         self.engine_name = engine_name
-        self.engine = self.ENGINES[engine_name]()
         self.use_bypass = use_bypass
         self.request_options = request_options or {}
+        # These libraries bind the hop limit to the client, not each request.
+        self.engine = (self.ENGINES[engine_name](max_redirects=self.request_options.get("max_redirects", 5))
+                       if engine_name in ("httpx", "requests") else self.ENGINES[engine_name]())
         self.bypass_techniques = None
     
     def set_bypass_techniques(self, bypass):
@@ -913,6 +954,9 @@ class HTTPEngine:
     
     async def request(self, *args, **kwargs) -> HTTPResponse:
         """Make an HTTP request using the configured engine."""
+        if self.engine_name in ("httpx", "requests") and "max_redirects" in kwargs:
+            if kwargs["max_redirects"] != self.engine.max_redirects:
+                raise ValueError("Configure maximum redirects when constructing the HTTP engine")
         return await self.engine.request(*args, **{**self.request_options, **kwargs})
     
     async def batch_request(

@@ -43,11 +43,17 @@ reports/
 output/
 *.json
 !package.json
+!.opencode/*.json
 !schemas/*.schema.json
+.opencode/node_modules/
 
 # Secrets
 .env
 .env.local
+.env.*
+.secrets/
+*.tfvars
+*.tfstate*
 *.pem
 *.key
 

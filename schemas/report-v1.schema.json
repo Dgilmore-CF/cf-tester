@@ -32,13 +32,19 @@
           "case_id": {"type": "string"},
           "method": {"type": "string"},
           "outcome": {"enum": ["blocked", "allowed", "challenged", "error", "inconclusive"]},
-          "attempt_type": {"enum": ["baseline", "bypass"]}
+          "attempt_type": {"enum": ["baseline", "bypass"]},
+          "body_format": {"enum": ["raw", "form", "json", "xml"]},
+          "observation_scope": {"const": "response"}
         }
       }
     },
     "summary": {
       "type": "object",
-      "required": ["protection_score", "waf_tests", "waf_bypasses", "transport_errors", "latency_ms"]
+      "required": ["protection_score", "waf_tests", "waf_bypasses", "transport_errors", "latency_ms"],
+      "properties": {
+        "score_method": {"type": "string"},
+        "protection_score": {"type": "number", "minimum": 0, "maximum": 100}
+      }
     },
     "quality_gate": {
       "type": "object",
@@ -48,6 +54,7 @@
         "reasons": {"type": "array", "items": {"type": "string"}}
       }
     },
-    "baseline_comparison": {"type": ["object", "null"]}
+    "baseline_comparison": {"type": ["object", "null"]},
+    "warnings": {"type": "array", "items": {"type": "string"}}
   }
 }

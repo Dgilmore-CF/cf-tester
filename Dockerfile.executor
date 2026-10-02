@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements-executor.txt ./
+RUN pip install --no-cache-dir -r requirements-executor.txt \
+    && groupadd --gid 10001 executor \
+    && useradd --uid 10001 --gid 10001 --no-create-home executor
+COPY cf_tester_service.py ./
+# Deliberately omit modules/__init__.py and all guarded/classic runner modules.
+# This is a namespace package containing only the executor and fixed catalogue.
+COPY modules/remote_runner.py modules/lab_catalogue.py ./modules/
+USER 10001:10001
+EXPOSE 8092
+CMD ["uvicorn", "cf_tester_service:app", "--host", "0.0.0.0", "--port", "8092", "--workers", "1", "--no-access-log"]

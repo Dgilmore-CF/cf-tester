@@ -1,6 +1,8 @@
 """Report generation module for WAF/DDoS test results."""
 
 import json
+import hashlib
+import math
 import time
 import os
 import platform
@@ -19,12 +21,13 @@ from rich.panel import Panel
 from rich import print as rprint
 
 from .ddos_simulator import DDoSTestResult, DDoSAttackType
-from .waf_tester import WAFOutcome, WAFTestResult
+from .waf_tester import CORPUS_WARNING, WAFOutcome, WAFTestResult
 from .config import Config
 
 logger = logging.getLogger(__name__)
 console = Console()
 TOOL_VERSION = "1.0.0"
+SCORE_METHOD = "response-mitigation-v2"
 
 
 @dataclass
@@ -254,35 +257,35 @@ class Reporter:
         self._display_recommendations()
     
     def _calculate_protection_score(self) -> float:
-        """Calculate overall protection score."""
+        """Score observed mitigation, counting missing evidence as unprotected coverage."""
         scores = []
         
         if self.ddos_results:
-            conclusive_requests = sum(r.total_requests - r.error_requests for r in self.ddos_results)
+            total_requests = sum(r.total_requests for r in self.ddos_results)
             mitigated_requests = sum(
                 r.blocked_requests + r.challenged_requests for r in self.ddos_results
             )
-            if conclusive_requests:
-                scores.append(min(mitigated_requests / conclusive_requests * 100, 100))
+            if total_requests:
+                scores.append(min(mitigated_requests / total_requests * 100, 100))
         
         if self.waf_results:
-            baseline_results = [r for r in self.waf_results if r.attempt_type == "baseline"]
-            conclusive = [
-                r for r in baseline_results
-                if r.outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED, WAFOutcome.ALLOWED)
+            baseline = [r for r in self.waf_results if r.attempt_type == "baseline"]
+            probes = [
+                r for r in baseline if r.test_case.expected_block
             ]
-            if conclusive:
-                correct = sum(
-                    1 for r in conclusive
-                    if (
-                        r.test_case.expected_block
-                        and r.outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
-                    ) or (
-                        not r.test_case.expected_block
-                        and r.outcome == WAFOutcome.ALLOWED
-                    )
+            if probes:
+                mitigated = sum(
+                    1 for r in probes
+                    if r.outcome in (WAFOutcome.BLOCKED, WAFOutcome.CHALLENGED)
                 )
-                scores.append(correct / len(conclusive) * 100)
+                # Successful controls add no credit; failed or unknown controls reduce confidence.
+                control_failures = sum(
+                    not r.test_case.expected_block and r.outcome != WAFOutcome.ALLOWED
+                    for r in baseline
+                )
+                scores.append(mitigated / (len(probes) + control_failures) * 100)
+            else:
+                scores.append(0)
         
         return sum(scores) / len(scores) if scores else 0
     
@@ -301,26 +304,26 @@ class Reporter:
         
         waf_bypasses = [r for r in self.waf_results if r.bypass_successful]
         if waf_bypasses:
-            bypass_techniques = set(r.bypass_technique for r in waf_bypasses if r.bypass_technique)
-            recommendations.append("• Review WAF rules for encoding bypass vulnerabilities")
-            if bypass_techniques:
-                recommendations.append(f"  - Vulnerable to: {', '.join(bypass_techniques)}")
-            recommendations.append("• Consider enabling additional paranoia levels in OWASP ruleset")
-            recommendations.append("• Enable Cloudflare's advanced WAF features")
+            recommendations.append("Review reported bypass evidence with application semantics and matched-rule logs before changing rules.")
         
         categories_with_issues: Dict[str, int] = {}
         for r in self.waf_results:
-            if not r.blocked or r.bypass_successful:
+            if r.attempt_type == "baseline" and r.test_case.expected_block and r.outcome == WAFOutcome.ALLOWED:
                 cat = r.test_case.category
                 categories_with_issues[cat] = categories_with_issues.get(cat, 0) + 1
         
         for cat, count in sorted(categories_with_issues.items(), key=lambda x: -x[1])[:5]:
-            recommendations.append(f"• Strengthen protection for {cat} attacks ({count} tests not blocked)")
+            recommendations.append(f"Review {cat} coverage ({count} allowed signatures); correlate rule logs and application semantics, not proof of a WAF vulnerability.")
+
+        if any(r.outcome in (WAFOutcome.ERROR, WAFOutcome.INCONCLUSIVE) for r in self.waf_results):
+            recommendations.append("Resolve transport errors or inconclusive responses and rerun; missing evidence is not a WAF vulnerability.")
+        if any(not r.test_case.expected_block and r.blocked for r in self.waf_results):
+            recommendations.append("Review benign control mitigation for possible false positives, not attack coverage gaps.")
+        if any(r.attempt_type == "bypass" and r.outcome == WAFOutcome.ALLOWED and not r.bypass_successful for r in self.waf_results):
+            recommendations.append("Allowed variants remain unverified without semantic equivalence and matched-rule evidence.")
         
         if not recommendations:
-            recommendations.append("• Protection appears comprehensive - continue monitoring")
-            recommendations.append("• Consider regular security assessments")
-            recommendations.append("• Keep WAF rules updated")
+            recommendations.append("No confirmed vulnerability inferred; response observations alone do not establish comprehensive WAF coverage.")
         
         for rec in recommendations:
             console.print(rec)
@@ -375,6 +378,8 @@ class Reporter:
                     "expected_block": r.test_case.expected_block,
                     "payload": r.test_case.payload,
                     "injection_point": r.test_case.injection_point,
+                    "body_format": r.test_case.body_format,
+                    "observation_scope": "response",
                     "cwe_id": r.test_case.cwe_id,
                     "owasp_category": r.test_case.owasp_category,
                     "cve_id": getattr(r.test_case, 'cve_id', None),
@@ -402,6 +407,7 @@ class Reporter:
             ],
             "summary": {
                 "protection_score": self._calculate_protection_score(),
+                "score_method": SCORE_METHOD,
                 "ddos_tests": len(self.ddos_results),
                 "waf_tests": len(baseline_results),
                 "bypass_attempts": len(bypass_results),
@@ -415,6 +421,7 @@ class Reporter:
             },
         }
         report_data["quality_gate"] = self._evaluate_quality_gate(report_data)
+        report_data["warnings"] = [CORPUS_WARNING]
         report_data["baseline_comparison"] = self._compare_baseline(report_data)
         return report_data
 
@@ -437,11 +444,32 @@ class Reporter:
             "targets": self.config.get_target_urls(),
             "http_engine": self.config.http_engine,
             "waf_ruleset": self.config.waf_ruleset.name,
+            "waf_test_all_categories": self.config.waf_test_all_categories,
+            "waf_categories": sorted(category.strip().casefold() for category in self.config.waf_categories),
             "bypass_enabled": self.config.use_bypass_techniques,
             "request_count": self.config.request_count,
             "concurrency": self.config.concurrency,
             "ddos_waves": self.config.ddos_waves,
+            "ddos_attack_type": self.config.ddos_attack_type,
+            "ddos_duration": self.config.ddos_duration,
+            "ddos_rate_limit": self.config.ddos_rate_limit,
+            "ddos_wave_delay": self.config.ddos_wave_delay,
+            "ddos_burst_mode": self.config.ddos_burst_mode,
+            "ddos_sustained": self.config.ddos_sustained,
+            "ddos_ramp_up": self.config.ddos_ramp_up,
             "timeout": self.config.timeout,
+            "ssl_verify": self.config.ssl_verify,
+            "follow_redirects": self.config.follow_redirects,
+            "max_redirects": self.config.max_redirects,
+            "user_agent_rotation": self.config.user_agent_rotation,
+            "retry_count": self.config.retry_count,
+            "retry_delay": self.config.retry_delay,
+            "request_context_hash": hashlib.sha256(json.dumps({
+                "headers": {key.lower(): value for key, value in self.config.custom_headers.items()},
+                "proxy": self.config.proxy,
+                "proxy_list": self.config.proxy_list,
+                "rotate_proxies": self.config.rotate_proxies,
+            }, sort_keys=True).encode()).hexdigest(),
             "response_bodies_included": self.config.include_response_body,
         }
 
@@ -469,10 +497,42 @@ class Reporter:
             return None
         try:
             baseline = json.loads(Path(self.baseline_file).read_text())
+            if not isinstance(baseline, dict) or not isinstance(baseline.get("summary"), dict):
+                raise ValueError("Baseline must be a report object with a summary")
             previous = baseline["summary"]
+            current = report_data["summary"]
+            reasons = []
+            if baseline.get("schema_version") != report_data["schema_version"]:
+                reasons.append("Schema version differs or is missing")
+            if previous.get("score_method") != current["score_method"]:
+                reasons.append("Scoring method differs or is missing")
+            previous_config = dict(baseline.get("configuration", {}))
+            current_config = dict(report_data["configuration"])
+            for config in (previous_config, current_config):
+                config.pop("response_bodies_included", None)
+            if not current_config or previous_config != current_config:
+                reasons.append("Request configuration differs or is missing")
+            # Preserve duplicate attempts, but do not require execution order to match.
+            def case_set(report):
+                waf = sorted((
+                    r["case_id"], r["target"], r["attempt_type"], r.get("parent_case_id") or "",
+                    r["expected_block"], r["ruleset"],
+                ) for r in report["waf_results"])
+                ddos = sorted((r["attack_type"], r["target"], r["total_requests"]) for r in report["ddos_results"])
+                return waf, ddos
+
+            if "waf_results" not in baseline or "ddos_results" not in baseline:
+                reasons.append("Case set is missing")
+            elif case_set(baseline) != case_set(report_data):
+                reasons.append("Case set differs")
+            if reasons:
+                return {"status": "incompatible", "reasons": reasons}
+            for key in ("protection_score", "waf_bypasses", "transport_errors"):
+                value = previous[key]
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise ValueError(f"Invalid baseline summary value: {key}")
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return {"status": "unavailable", "error": str(exc)}
-        current = report_data["summary"]
         return {
             "status": "compared",
             "protection_score_delta": current["protection_score"] - previous["protection_score"],
@@ -549,14 +609,14 @@ class Reporter:
                 findings.append({
                     "ruleId": result["case_id"],
                     "level": "warning",
-                    "message": {"text": f"{result['test_name']} was not blocked"},
+                    "message": {"text": f"{result['test_name']} was allowed at response level; rule coverage and exploit semantics are unverified"},
                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": result["target"]}}}],
                 })
             elif result["attempt_type"] == "bypass" and result["bypass_successful"]:
                 findings.append({
                     "ruleId": result["parent_case_id"] or result["case_id"],
                     "level": "error",
-                    "message": {"text": f"{result['test_name']} bypassed the WAF"},
+                    "message": {"text": f"{result['test_name']} reported as a bypass; review supporting semantic and rule evidence"},
                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": result["target"]}}}],
                 })
         return {
@@ -585,6 +645,7 @@ class Reporter:
             f"WAF Bypasses Found: {report_data['summary']['waf_bypasses']}",
             "",
         ]
+        lines.extend(f"Warning: {warning}" for warning in report_data.get("warnings", []))
         
         if report_data['ddos_results']:
             lines.extend([
@@ -657,6 +718,7 @@ class Reporter:
                     "",
                     f"Result: {status} (Status: {r['response_code']}, Time: {r['response_time']:.3f}s)",
                 ])
+                lines.extend(f"Note: {note}" for note in r.get("notes", []))
                 
                 if r.get('cf_ray'):
                     lines.append(f"CF-Ray: {r['cf_ray']}")

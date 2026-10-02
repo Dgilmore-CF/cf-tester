@@ -83,6 +83,20 @@ class Config:
 
         if self.max_transport_errors is not None and self.max_transport_errors < 0:
             raise ValueError("Maximum transport errors cannot be negative")
+
+        if not isinstance(self.follow_redirects, bool):
+            raise ValueError("Follow redirects must be a boolean")
+        if type(self.max_redirects) is not int or self.max_redirects < 1:
+            raise ValueError("Maximum redirects must be a positive integer")
+        if self.http_engine in ("selenium", "playwright") and (
+            not self.follow_redirects or self.max_redirects != 5
+        ):
+            raise ValueError("Browser engines do not support redirect controls; use a non-browser engine")
+
+        if not self.waf_test_all_categories and not self.waf_categories:
+            raise ValueError("Select at least one WAF category when all categories are disabled")
+        if any(not isinstance(category, str) or not category.strip() for category in self.waf_categories):
+            raise ValueError("WAF categories must be nonempty strings")
         
         return True
     

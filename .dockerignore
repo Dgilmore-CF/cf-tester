@@ -1,0 +1,7 @@
+**
+!Dockerfile.executor
+!requirements-executor.txt
+!cf_tester_service.py
+!modules/
+!modules/remote_runner.py
+!modules/lab_catalogue.py
