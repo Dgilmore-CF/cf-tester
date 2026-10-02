@@ -1,0 +1,19 @@
+tests/unit/test_lab_reporting.py
+  s_01c9bb13b6d2f4::t_fc476e98817dbd 1-1014
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "38d8f6846dcd5b40a1a7597959534373361c257b",
+  "prompts": {},
+  "sessions": {
+    "s_01c9bb13b6d2f4": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f112ef886ffezx5JWaYD3IlTtM",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Dgilmore-CF <dgilmore@cloudflare.com>"
+    }
+  }
+}
